@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Pencil,
@@ -6,10 +6,12 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-function Sales({ sales, setSales }) {
+const API_URL = "http://localhost:5000/api";
 
+function Sales({ sales, setSales }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     customer: "",
@@ -19,9 +21,54 @@ function Sales({ sales, setSales }) {
     paid: "Paid",
   });
 
-  // =========================
+  // =====================================
+  // LOAD SALES FROM BACKEND
+  // =====================================
+
+  const loadSales = async () => {
+    try {
+      setLoading(true);
+
+      const response = await fetch(`${API_URL}/sales`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Sales API failed");
+      }
+
+      const data = await response.json();
+
+      const formattedSales = data.map((sale) => ({
+        id: sale.id,
+        customer: sale.customer || "Unknown Customer",
+        date: sale.date || sale.sale_date?.split("T")[0] || "",
+        quantity: Number(sale.quantity),
+        rate: Number(sale.rate),
+        paid:
+          sale.paid === true ||
+          sale.paid === 1 ||
+          sale.paid === "1",
+        customer_id: sale.customer_id,
+        stock_id: sale.stock_id,
+      }));
+
+      setSales(formattedSales);
+    } catch (error) {
+      console.error("Load sales error:", error);
+      alert("Sales data load aagala. Backend running-ah check pannu.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSales();
+  }, []);
+
+  // =====================================
   // INPUT CHANGE
-  // =========================
+  // =====================================
 
   const handleChange = (e) => {
     setForm({
@@ -30,16 +77,16 @@ function Sales({ sales, setSales }) {
     });
   };
 
-  // =========================
-  // ADD SALE
-  // =========================
+  // =====================================
+  // OPEN ADD FORM
+  // =====================================
 
   const openAddForm = () => {
     setEditId(null);
 
     setForm({
       customer: "",
-      date: "",
+      date: new Date().toISOString().split("T")[0],
       quantity: "",
       rate: "",
       paid: "Paid",
@@ -48,9 +95,9 @@ function Sales({ sales, setSales }) {
     setShowForm(true);
   };
 
-  // =========================
+  // =====================================
   // EDIT SALE
-  // =========================
+  // =====================================
 
   const handleEdit = (sale) => {
     setEditId(sale.id);
@@ -66,11 +113,41 @@ function Sales({ sales, setSales }) {
     setShowForm(true);
   };
 
-  // =========================
-  // ADD / UPDATE SALE
-  // =========================
+  // =====================================
+  // FIND CUSTOMER ID
+  // =====================================
 
-  const handleSubmit = (e) => {
+  const getCustomerId = async (customerName) => {
+    const response = await fetch(`${API_URL}/customers`, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("Customers API failed");
+    }
+
+    const customers = await response.json();
+
+    const matchedCustomer = customers.find(
+      (customer) =>
+        customer.name.trim().toLowerCase() ===
+        customerName.trim().toLowerCase()
+    );
+
+    if (!matchedCustomer) {
+      throw new Error(
+        `Customer "${customerName}" database-la illa. First Customers page-la add pannu.`
+      );
+    }
+
+    return matchedCustomer.id;
+  };
+
+  // =====================================
+  // ADD / UPDATE SALE
+  // =====================================
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (
@@ -96,56 +173,101 @@ function Sales({ sales, setSales }) {
       return;
     }
 
-    const saleData = {
-      customer: form.customer.trim(),
-      date: form.date,
-      quantity,
-      rate,
-      paid: form.paid === "Paid",
-    };
+    try {
+      setLoading(true);
 
-    // EDIT
-    if (editId !== null) {
-      setSales((currentSales) =>
-        currentSales.map((sale) =>
-          sale.id === editId
-            ? {
-                ...sale,
-                ...saleData,
-              }
-            : sale
-        )
-      );
+      // Customer name-la irundhu customer ID edukkum
+      const customerId = await getCustomerId(form.customer);
+
+      /*
+        IMPORTANT:
+        Current sales table-ku stock_id required.
+        Existing stock table-la stock ID 1 irukku.
+        So current setup-ku stock_id: 1 use pannrom.
+      */
+
+      const salePayload = {
+        customer_id: Number(customerId),
+        stock_id: 1,
+        quantity: quantity,
+        rate: rate,
+        paid: form.paid === "Paid" ? 1 : 0,
+        sale_date: form.date,
+      };
+
+      // =================================
+      // EDIT SALE
+      // =================================
+
+      if (editId !== null) {
+        const response = await fetch(`${API_URL}/sales/${editId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(salePayload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message || "Sale update failed"
+          );
+        }
+
+        alert("Sale updated successfully");
+      }
+
+      // =================================
+      // ADD SALE
+      // =================================
+
+      else {
+        const response = await fetch(`${API_URL}/sales`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(salePayload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+
+          throw new Error(
+            errorData.message || "Sale save failed"
+          );
+        }
+
+        alert("Sale saved to MySQL successfully");
+      }
+
+      // Database-la irundhu fresh data load pannum
+      await loadSales();
+
+      setForm({
+        customer: "",
+        date: "",
+        quantity: "",
+        rate: "",
+        paid: "Paid",
+      });
+
+      setEditId(null);
+      setShowForm(false);
+    } catch (error) {
+      console.error("Save sale error:", error);
+      alert(error.message);
+    } finally {
+      setLoading(false);
     }
-
-    // ADD
-    else {
-      setSales((currentSales) => [
-        ...currentSales,
-        {
-          id: Date.now(),
-          ...saleData,
-        },
-      ]);
-    }
-
-    setForm({
-      customer: "",
-      date: "",
-      quantity: "",
-      rate: "",
-      paid: "Paid",
-    });
-
-    setEditId(null);
-    setShowForm(false);
   };
 
-  // =========================
-  // DELETE
-  // =========================
+  // =====================================
+  // SOFT DELETE SALE
+  // =====================================
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this sale?"
     );
@@ -154,18 +276,37 @@ function Sales({ sales, setSales }) {
       return;
     }
 
-    setSales((currentSales) =>
-      currentSales.filter(
-        (sale) => sale.id !== id
-      )
-    );
+    try {
+      setLoading(true);
+
+      const response = await fetch(`${API_URL}/sales/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        throw new Error(
+          errorData.message || "Sale delete failed"
+        );
+      }
+
+      alert("Sale deleted successfully");
+
+      await loadSales();
+    } catch (error) {
+      console.error("Delete sale error:", error);
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // =========================
+  // =====================================
   // RESET
-  // =========================
+  // =====================================
 
-  const handleReset = () => {
+  const handleReset = async () => {
     const confirmReset = window.confirm(
       "Are you sure you want to reset all sales data?"
     );
@@ -177,9 +318,9 @@ function Sales({ sales, setSales }) {
     setSales([]);
   };
 
-  // =========================
-  // TOTAL SALES / REVENUE
-  // =========================
+  // =====================================
+  // TOTAL SALES
+  // =====================================
 
   const totalSales = sales.reduce(
     (total, sale) =>
@@ -188,9 +329,9 @@ function Sales({ sales, setSales }) {
     0
   );
 
-  // =========================
+  // =====================================
   // TOTAL QUANTITY
-  // =========================
+  // =====================================
 
   const totalQuantity = sales.reduce(
     (total, sale) =>
@@ -198,9 +339,9 @@ function Sales({ sales, setSales }) {
     0
   );
 
-  // =========================
+  // =====================================
   // PENDING AMOUNT
-  // =========================
+  // =====================================
 
   const pendingAmount = sales.reduce(
     (total, sale) =>
@@ -214,30 +355,19 @@ function Sales({ sales, setSales }) {
 
   return (
     <div className="page">
-
-      {/* ========================= */}
       {/* HEADER */}
-      {/* ========================= */}
 
       <div className="page-header">
-
         <div>
-
-          <h1>
-            Sales Management
-          </h1>
-
-          <p>
-            Manage your coconut sales
-          </p>
-
+          <h1>Sales Management</h1>
+          <p>Manage your coconut sales</p>
         </div>
 
         <div className="page-actions">
-
           <button
             className="reset-btn"
             onClick={handleReset}
+            disabled={loading}
           >
             <RotateCcw size={17} />
             Reset
@@ -246,85 +376,52 @@ function Sales({ sales, setSales }) {
           <button
             className="add-btn"
             onClick={openAddForm}
+            disabled={loading}
           >
             <Plus size={18} />
             Add Sale
           </button>
-
         </div>
-
       </div>
 
-      {/* ========================= */}
       {/* SUMMARY */}
-      {/* ========================= */}
 
       <div className="stock-summary">
-
-        {/* TOTAL SALES */}
-
         <div className="summary-card">
-
-          <span>
-            Total Sales
-          </span>
+          <span>Total Sales</span>
 
           <strong>
             ₹{totalSales.toLocaleString()}
           </strong>
 
-          <small>
-            Total revenue
-          </small>
-
+          <small>Total revenue</small>
         </div>
 
-        {/* COCONUTS SOLD */}
-
         <div className="summary-card">
-
-          <span>
-            Coconuts Sold
-          </span>
+          <span>Coconuts Sold</span>
 
           <strong>
             {totalQuantity.toLocaleString()}
           </strong>
 
-          <small>
-            Total quantity sold
-          </small>
-
+          <small>Total quantity sold</small>
         </div>
 
-        {/* PENDING */}
-
         <div className="summary-card">
-
-          <span>
-            Pending Amount
-          </span>
+          <span>Pending Amount</span>
 
           <strong>
             ₹{pendingAmount.toLocaleString()}
           </strong>
 
-          <small>
-            Amount to collect
-          </small>
-
+          <small>Amount to collect</small>
         </div>
-
       </div>
 
-      {/* ========================= */}
-      {/* ADD / EDIT FORM */}
-      {/* ========================= */}
+      {/* FORM */}
 
       {showForm && (
-
         <div className="form-card">
-
           <h2>
             {editId !== null
               ? "Edit Sale"
@@ -332,16 +429,11 @@ function Sales({ sales, setSales }) {
           </h2>
 
           <form onSubmit={handleSubmit}>
-
             <div className="form-grid">
-
               {/* CUSTOMER */}
 
               <div className="form-group">
-
-                <label>
-                  Customer Name
-                </label>
+                <label>Customer Name</label>
 
                 <input
                   type="text"
@@ -350,16 +442,12 @@ function Sales({ sales, setSales }) {
                   value={form.customer}
                   onChange={handleChange}
                 />
-
               </div>
 
               {/* DATE */}
 
               <div className="form-group">
-
-                <label>
-                  Date
-                </label>
+                <label>Date</label>
 
                 <input
                   type="date"
@@ -367,16 +455,12 @@ function Sales({ sales, setSales }) {
                   value={form.date}
                   onChange={handleChange}
                 />
-
               </div>
 
               {/* QUANTITY */}
 
               <div className="form-group">
-
-                <label>
-                  Quantity
-                </label>
+                <label>Quantity</label>
 
                 <input
                   type="number"
@@ -386,16 +470,12 @@ function Sales({ sales, setSales }) {
                   value={form.quantity}
                   onChange={handleChange}
                 />
-
               </div>
 
               {/* RATE */}
 
               <div className="form-group">
-
-                <label>
-                  Selling Rate
-                </label>
+                <label>Selling Rate</label>
 
                 <input
                   type="number"
@@ -405,41 +485,27 @@ function Sales({ sales, setSales }) {
                   value={form.rate}
                   onChange={handleChange}
                 />
-
               </div>
 
               {/* PAYMENT */}
 
               <div className="form-group">
-
-                <label>
-                  Payment Status
-                </label>
+                <label>Payment Status</label>
 
                 <select
                   name="paid"
                   value={form.paid}
                   onChange={handleChange}
                 >
-
-                  <option value="Paid">
-                    Paid
-                  </option>
-
-                  <option value="Pending">
-                    Pending
-                  </option>
-
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
                 </select>
-
               </div>
-
             </div>
 
-            {/* FORM BUTTONS */}
+            {/* BUTTONS */}
 
             <div className="form-buttons">
-
               <button
                 type="button"
                 className="cancel-btn"
@@ -454,119 +520,65 @@ function Sales({ sales, setSales }) {
               <button
                 type="submit"
                 className="save-btn"
+                disabled={loading}
               >
-                {editId !== null
+                {loading
+                  ? "Saving..."
+                  : editId !== null
                   ? "Save Changes"
                   : "Add Sale"}
               </button>
-
             </div>
-
           </form>
-
         </div>
-
       )}
 
-      {/* ========================= */}
       {/* SALES HISTORY */}
-      {/* ========================= */}
 
       <div className="stock-table-card">
-
         <div className="table-title">
-
-          <h2>
-            Sales History
-          </h2>
-
-          <p>
-            All coconut sales records
-          </p>
-
+          <h2>Sales History</h2>
+          <p>All coconut sales records</p>
         </div>
 
         {sales.length === 0 ? (
-
           <div className="empty-state">
+            <div>💰</div>
 
-            <div>
-              💰
-            </div>
+            <h3>No Sales Available</h3>
 
-            <h3>
-              No Sales Available
-            </h3>
-
-            <p>
-              Add a sale to see it here.
-            </p>
-
+            <p>Add a sale to see it here.</p>
           </div>
-
         ) : (
-
           <div className="table-container">
-
             <table>
-
               <thead>
-
                 <tr>
-
-                  <th>
-                    Customer
-                  </th>
-
-                  <th>
-                    Date
-                  </th>
-
-                  <th>
-                    Quantity
-                  </th>
-
-                  <th>
-                    Rate
-                  </th>
-
-                  <th>
-                    Total
-                  </th>
-
-                  <th>
-                    Payment
-                  </th>
-
-                  <th>
-                    Actions
-                  </th>
-
+                  <th>Customer</th>
+                  <th>Date</th>
+                  <th>Quantity</th>
+                  <th>Rate</th>
+                  <th>Total</th>
+                  <th>Payment</th>
+                  <th>Actions</th>
                 </tr>
-
               </thead>
 
               <tbody>
-
                 {sales.map((sale) => {
-
                   const total =
                     Number(sale.quantity) *
                     Number(sale.rate);
 
                   return (
-
                     <tr key={sale.id}>
-
                       <td>
                         <strong>
                           {sale.customer}
                         </strong>
                       </td>
 
-                      <td>
-                        {sale.date}
-                      </td>
+                      <td>{sale.date}</td>
 
                       <td>
                         {Number(
@@ -575,7 +587,8 @@ function Sales({ sales, setSales }) {
                       </td>
 
                       <td>
-                        ₹{Number(
+                        ₹
+                        {Number(
                           sale.rate
                         ).toLocaleString()}
                       </td>
@@ -585,7 +598,6 @@ function Sales({ sales, setSales }) {
                       </td>
 
                       <td>
-
                         <span
                           className={
                             sale.paid
@@ -597,13 +609,10 @@ function Sales({ sales, setSales }) {
                             ? "Paid"
                             : "Pending"}
                         </span>
-
                       </td>
 
                       <td>
-
                         <div className="action-buttons">
-
                           <button
                             className="edit-btn"
                             onClick={() =>
@@ -617,34 +626,22 @@ function Sales({ sales, setSales }) {
                           <button
                             className="delete-btn"
                             onClick={() =>
-                              handleDelete(
-                                sale.id
-                              )
+                              handleDelete(sale.id)
                             }
                             title="Delete"
                           >
                             <Trash2 size={16} />
                           </button>
-
                         </div>
-
                       </td>
-
                     </tr>
-
                   );
                 })}
-
               </tbody>
-
             </table>
-
           </div>
-
         )}
-
       </div>
-
     </div>
   );
 }

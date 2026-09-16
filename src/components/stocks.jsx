@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Pencil,
@@ -7,19 +7,9 @@ import {
 } from "lucide-react";
 
 function Stock({ stocks, setStocks }) {
-
-
-  const totalStock = stocks.reduce(
-    (total, stock) => total + Number(stock.quantity),
-    0
-  );
-
-  // =========================
-  // ADD / EDIT FORM
-  // =========================
-
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [form, setForm] = useState({
     type: "",
@@ -28,10 +18,51 @@ function Stock({ stocks, setStocks }) {
     sellingPrice: "",
   });
 
-  // =========================
-  // INPUT CHANGE
-  // =========================
+  // =====================================
+  // FETCH STOCKS FROM DATABASE
+  // =====================================
+  const fetchStocks = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/stocks"
+      );
 
+      const result = await response.json();
+
+      if (result.success) {
+        setStocks(result.data);
+      }
+    } catch (error) {
+      console.error("Fetch stocks error:", error);
+      alert("Unable to load stocks from database");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStocks();
+  }, []);
+
+  // =====================================
+  // SUMMARY
+  // =====================================
+  const totalStock = stocks.reduce(
+    (total, stock) => total + Number(stock.quantity),
+    0
+  );
+
+  const totalValue = stocks.reduce(
+    (total, stock) =>
+      total +
+      Number(stock.quantity) *
+        Number(stock.sellingPrice),
+    0
+  );
+
+  // =====================================
+  // INPUT CHANGE
+  // =====================================
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -41,10 +72,9 @@ function Stock({ stocks, setStocks }) {
     });
   };
 
-  // =========================
+  // =====================================
   // OPEN ADD FORM
-  // =========================
-
+  // =====================================
   const openAddForm = () => {
     setEditId(null);
 
@@ -58,10 +88,9 @@ function Stock({ stocks, setStocks }) {
     setShowForm(true);
   };
 
-  // =========================
+  // =====================================
   // OPEN EDIT FORM
-  // =========================
-
+  // =====================================
   const handleEdit = (stock) => {
     setEditId(stock.id);
 
@@ -75,11 +104,10 @@ function Stock({ stocks, setStocks }) {
     setShowForm(true);
   };
 
-  // =========================
-  // ADD / EDIT STOCK
-  // =========================
-
-  const handleSubmit = (e) => {
+  // =====================================
+  // ADD / UPDATE STOCK
+  // =====================================
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (
@@ -92,68 +120,123 @@ function Stock({ stocks, setStocks }) {
       return;
     }
 
-    const newQuantity = Number(form.quantity);
-    const purchasePrice = Number(form.purchasePrice);
-    const sellingPrice = Number(form.sellingPrice);
-
-    if (!Number.isFinite(newQuantity) || newQuantity < 0) {
-      alert("Quantity cannot be negative");
-      return;
-    }
-
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
-      alert("Please enter a valid purchase price");
-      return;
-    }
-
-    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
-      alert("Please enter a valid selling price");
-      return;
-    }
-
     const stockData = {
       type: form.type.trim(),
-      quantity: newQuantity,
-      purchasePrice: purchasePrice,
-      sellingPrice: sellingPrice,
+      quantity: Number(form.quantity),
+      purchasePrice: Number(form.purchasePrice),
+      sellingPrice: Number(form.sellingPrice),
     };
 
-    // =========================
-    // EDIT EXISTING STOCK
-    // =========================
+    if (
+      stockData.quantity < 0 ||
+      stockData.purchasePrice < 0 ||
+      stockData.sellingPrice < 0
+    ) {
+      alert("Values cannot be negative");
+      return;
+    }
 
-    if (editId !== null) {
-      setStocks((currentStocks) =>
-        currentStocks.map((stock) =>
-          stock.id === editId
-            ? {
-                ...stock,
-                ...stockData,
-              }
-            : stock
-        )
+    try {
+      let response;
+
+      // UPDATE
+      if (editId !== null) {
+        response = await fetch(
+          `http://localhost:5000/api/stocks/${editId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(stockData),
+          }
+        );
+      }
+
+      // ADD
+      else {
+        response = await fetch(
+          "http://localhost:5000/api/stocks",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(stockData),
+          }
+        );
+      }
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(result.message || "Something went wrong");
+        return;
+      }
+
+      alert(
+        editId !== null
+          ? "Stock updated successfully"
+          : "Stock added successfully"
       );
+
+      await fetchStocks();
+
+      setForm({
+        type: "",
+        quantity: "",
+        purchasePrice: "",
+        sellingPrice: "",
+      });
+
+      setEditId(null);
+      setShowForm(false);
+    } catch (error) {
+      console.error("Save stock error:", error);
+      alert("Unable to save stock");
     }
+  };
 
-    // =========================
-    // ADD NEW STOCK
-    // =========================
+  // =====================================
+  // DELETE STOCK
+  // =====================================
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this stock?"
+    );
 
-    else {
-      const newStock = {
-        id: Date.now(),
-        ...stockData,
-      };
+    if (!confirmDelete) return;
 
-      setStocks((currentStocks) => [
-        ...currentStocks,
-        newStock,
-      ]);
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/stocks/${id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(result.message || "Delete failed");
+        return;
+      }
+
+      alert("Stock deleted successfully");
+
+      await fetchStocks();
+    } catch (error) {
+      console.error("Delete stock error:", error);
+      alert("Unable to delete stock");
     }
+  };
 
-    // =========================
-    // CLEAR FORM
-    // =========================
+  // =====================================
+  // RESET FORM
+  // =====================================
+  const handleReset = () => {
+    setShowForm(false);
+    setEditId(null);
 
     setForm({
       type: "",
@@ -161,79 +244,32 @@ function Stock({ stocks, setStocks }) {
       purchasePrice: "",
       sellingPrice: "",
     });
-
-    setEditId(null);
-    setShowForm(false);
   };
 
-  // =========================
-  // DELETE STOCK
-  // =========================
-
-  const handleDelete = (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this stock?"
+  // =====================================
+  // LOADING
+  // =====================================
+  if (loading) {
+    return (
+      <div className="page">
+        <h2>Loading stock data...</h2>
+      </div>
     );
+  }
 
-    if (!confirmDelete) {
-      return;
-    }
-
-    setStocks((currentStocks) =>
-      currentStocks.filter((stock) => stock.id !== id)
-    );
-  };
-
-  // =========================
-  // RESET ALL STOCK
-  // =========================
-
-  const handleReset = () => {
-    const confirmReset = window.confirm(
-      "Are you sure you want to reset all stock data?"
-    );
-
-    if (!confirmReset) {
-      return;
-    }
-
-    setStocks([]);
-  };
-
-  // =========================
-  // STOCK VALUE
-  // =========================
-
-  const totalValue = stocks.reduce(
-    (total, stock) =>
-      total +
-      Number(stock.quantity) * Number(stock.sellingPrice),
-    0
-  );
-
-  // =========================
+  // =====================================
   // RENDER
-  // =========================
-
+  // =====================================
   return (
     <div className="page">
-
-      {/* ========================= */}
       {/* HEADER */}
-      {/* ========================= */}
-
       <div className="page-header">
-
         <div>
           <h1>Stock Management</h1>
-
-          <p>
-            Manage your coconut stock
-          </p>
+          <p>Manage your coconut stock</p>
         </div>
 
         <div className="page-actions">
-
           <button
             className="reset-btn"
             onClick={handleReset}
@@ -249,85 +285,43 @@ function Stock({ stocks, setStocks }) {
             <Plus size={18} />
             Add Stock
           </button>
-
         </div>
-
       </div>
 
-      {/* ========================= */}
       {/* SUMMARY CARDS */}
-      {/* ========================= */}
-
       <div className="stock-summary">
-
-        {/* TOTAL STOCK */}
-
         <div className="summary-card">
-
-          <div className="summary-card-header">
-
-            <span>
-              Total Stock
-            </span>
-
-          </div>
+          <span>Total Stock</span>
 
           <strong>
             {totalStock.toLocaleString()}
           </strong>
 
-          <small>
-            Coconuts available
-          </small>
-
+          <small>Coconuts available</small>
         </div>
 
-        {/* STOCK VALUE */}
-
         <div className="summary-card">
-
-          <span>
-            Stock Value
-          </span>
+          <span>Stock Value</span>
 
           <strong>
             ₹{totalValue.toLocaleString()}
           </strong>
 
-          <small>
-            Current selling value
-          </small>
-
+          <small>Current selling value</small>
         </div>
-
-        {/* STOCK TYPES */}
 
         <div className="summary-card">
+          <span>Stock Types</span>
 
-          <span>
-            Stock Types
-          </span>
+          <strong>{stocks.length}</strong>
 
-          <strong>
-            {stocks.length}
-          </strong>
-
-          <small>
-            Different varieties
-          </small>
-
+          <small>Different varieties</small>
         </div>
-
       </div>
 
-      {/* ========================= */}
       {/* ADD / EDIT FORM */}
-      {/* ========================= */}
-
       {showForm && (
-
         <div className="form-card">
-
           <h2>
             {editId !== null
               ? "Edit Stock"
@@ -335,16 +329,9 @@ function Stock({ stocks, setStocks }) {
           </h2>
 
           <form onSubmit={handleSubmit}>
-
             <div className="form-grid">
-
-              {/* COCONUT TYPE */}
-
               <div className="form-group">
-
-                <label>
-                  Coconut Type
-                </label>
+                <label>Coconut Type</label>
 
                 <input
                   type="text"
@@ -353,16 +340,10 @@ function Stock({ stocks, setStocks }) {
                   value={form.type}
                   onChange={handleChange}
                 />
-
               </div>
 
-              {/* QUANTITY */}
-
               <div className="form-group">
-
-                <label>
-                  Quantity
-                </label>
+                <label>Quantity</label>
 
                 <input
                   type="number"
@@ -372,16 +353,10 @@ function Stock({ stocks, setStocks }) {
                   value={form.quantity}
                   onChange={handleChange}
                 />
-
               </div>
 
-              {/* PURCHASE PRICE */}
-
               <div className="form-group">
-
-                <label>
-                  Purchase Price
-                </label>
+                <label>Purchase Price</label>
 
                 <input
                   type="number"
@@ -391,16 +366,10 @@ function Stock({ stocks, setStocks }) {
                   value={form.purchasePrice}
                   onChange={handleChange}
                 />
-
               </div>
 
-              {/* SELLING PRICE */}
-
               <div className="form-group">
-
-                <label>
-                  Selling Price
-                </label>
+                <label>Selling Price</label>
 
                 <input
                   type="number"
@@ -410,29 +379,14 @@ function Stock({ stocks, setStocks }) {
                   value={form.sellingPrice}
                   onChange={handleChange}
                 />
-
               </div>
-
             </div>
 
-            {/* FORM BUTTONS */}
-
             <div className="form-buttons">
-
               <button
                 type="button"
                 className="cancel-btn"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditId(null);
-
-                  setForm({
-                    type: "",
-                    quantity: "",
-                    purchasePrice: "",
-                    sellingPrice: "",
-                  });
-                }}
+                onClick={handleReset}
               >
                 Cancel
               </button>
@@ -445,99 +399,43 @@ function Stock({ stocks, setStocks }) {
                   ? "Save Changes"
                   : "Add Stock"}
               </button>
-
             </div>
-
           </form>
-
         </div>
-
       )}
 
-      {/* ========================= */}
-      {/* CURRENT STOCK TABLE */}
-      {/* ========================= */}
-
+      {/* STOCK TABLE */}
       <div className="stock-table-card">
-
         <div className="table-title">
-
-          <h2>
-            Current Stock
-          </h2>
-
-          <p>
-            All available coconut stock
-          </p>
-
+          <h2>Current Stock</h2>
+          <p>All available coconut stock</p>
         </div>
 
         {stocks.length === 0 ? (
-
           <div className="empty-state">
-
-            <div>
-              🥥
-            </div>
-
-            <h3>
-              No Stock Available
-            </h3>
-
-            <p>
-              Add stock to see it here.
-            </p>
-
+            <div>🥥</div>
+            <h3>No Stock Available</h3>
+            <p>Add stock to see it here.</p>
           </div>
-
         ) : (
-
           <div className="table-container">
-
             <table>
-
               <thead>
-
                 <tr>
-
-                  <th>
-                    Coconut Type
-                  </th>
-
-                  <th>
-                    Quantity
-                  </th>
-
-                  <th>
-                    Purchase Price
-                  </th>
-
-                  <th>
-                    Selling Price
-                  </th>
-
-                  <th>
-                    Stock Value
-                  </th>
-
-                  <th>
-                    Actions
-                  </th>
-
+                  <th>Coconut Type</th>
+                  <th>Quantity</th>
+                  <th>Purchase Price</th>
+                  <th>Selling Price</th>
+                  <th>Stock Value</th>
+                  <th>Actions</th>
                 </tr>
-
               </thead>
 
               <tbody>
-
                 {stocks.map((stock) => (
-
                   <tr key={stock.id}>
-
                     <td>
-                      <strong>
-                        {stock.type}
-                      </strong>
+                      <strong>{stock.type}</strong>
                     </td>
 
                     <td>
@@ -547,13 +445,15 @@ function Stock({ stocks, setStocks }) {
                     </td>
 
                     <td>
-                      ₹{Number(
+                      ₹
+                      {Number(
                         stock.purchasePrice
                       ).toLocaleString()}
                     </td>
 
                     <td>
-                      ₹{Number(
+                      ₹
+                      {Number(
                         stock.sellingPrice
                       ).toLocaleString()}
                     </td>
@@ -567,9 +467,7 @@ function Stock({ stocks, setStocks }) {
                     </td>
 
                     <td>
-
                       <div className="action-buttons">
-
                         <button
                           className="edit-btn"
                           onClick={() =>
@@ -589,25 +487,15 @@ function Stock({ stocks, setStocks }) {
                         >
                           <Trash2 size={16} />
                         </button>
-
                       </div>
-
                     </td>
-
                   </tr>
-
                 ))}
-
               </tbody>
-
             </table>
-
           </div>
-
         )}
-
       </div>
-
     </div>
   );
 }

@@ -1,18 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Pencil,
   Trash2,
   RotateCcw,
-  Users,
   Phone,
   MapPin,
 } from "lucide-react";
 
-function Customers({ customers, setCustomers }) {
+// Backend API URL
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:5000/api/customers";
 
+function Customers({ customers = [], setCustomers }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -20,21 +24,61 @@ function Customers({ customers, setCustomers }) {
     address: "",
   });
 
-  // =========================
-  // HANDLE INPUT
-  // =========================
+  // ==========================================
+  // LOAD CUSTOMERS FROM MYSQL
+  // ==========================================
+  const loadCustomers = async () => {
+    try {
+      setLoading(true);
 
-  const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.name]: e.target.value,
-    });
+      const response = await fetch(API_URL);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch customers");
+      }
+
+      const data = await response.json();
+
+      // Make sure response is an array
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid customer data received");
+      }
+
+      setCustomers(data);
+    } catch (error) {
+      console.error("Load customers error:", error);
+
+      alert(
+        "Cannot connect to customer API.\n\n" +
+        "Make sure backend is running on http://localhost:5000"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // =========================
-  // OPEN ADD FORM
-  // =========================
+  // ==========================================
+  // LOAD CUSTOMERS WHEN PAGE OPENS
+  // ==========================================
+  useEffect(() => {
+    loadCustomers();
+  }, []);
 
+  // ==========================================
+  // HANDLE INPUT
+  // ==========================================
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
+  };
+
+  // ==========================================
+  // OPEN ADD FORM
+  // ==========================================
   const openAddForm = () => {
     setEditId(null);
 
@@ -47,27 +91,25 @@ function Customers({ customers, setCustomers }) {
     setShowForm(true);
   };
 
-  // =========================
+  // ==========================================
   // EDIT CUSTOMER
-  // =========================
-
+  // ==========================================
   const handleEdit = (customer) => {
     setEditId(customer.id);
 
     setForm({
-      name: customer.name,
-      phone: customer.phone,
-      address: customer.address,
+      name: customer.name || "",
+      phone: customer.phone || "",
+      address: customer.address || "",
     });
 
     setShowForm(true);
   };
 
-  // =========================
-  // SAVE CUSTOMER
-  // =========================
-
-  const handleSubmit = (e) => {
+  // ==========================================
+  // ADD / UPDATE CUSTOMER
+  // ==========================================
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.name.trim()) {
@@ -86,35 +128,118 @@ function Customers({ customers, setCustomers }) {
       address: form.address.trim(),
     };
 
-    // EDIT
-    if (editId !== null) {
+    try {
+      // ======================================
+      // UPDATE CUSTOMER
+      // ======================================
+      if (editId !== null) {
+        const response = await fetch(`${API_URL}/${editId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(customerData),
+        });
 
-      setCustomers((currentCustomers) =>
-        currentCustomers.map((customer) =>
-          customer.id === editId
-            ? {
-                ...customer,
-                ...customerData,
-              }
-            : customer
-        )
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message || "Failed to update customer"
+          );
+        }
+
+        alert("Customer updated successfully");
+
+        await loadCustomers();
+      }
+
+      // ======================================
+      // ADD CUSTOMER
+      // ======================================
+      else {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(customerData),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message || "Failed to add customer"
+          );
+        }
+
+        alert("Customer added successfully");
+
+        await loadCustomers();
+      }
+
+      // Reset form
+      setForm({
+        name: "",
+        phone: "",
+        address: "",
+      });
+
+      setEditId(null);
+      setShowForm(false);
+    } catch (error) {
+      console.error("Save customer error:", error);
+
+      alert(
+        error.message ||
+          "Something went wrong while saving customer"
       );
+    }
+  };
 
+  // ==========================================
+  // DELETE CUSTOMER
+  // ==========================================
+  const handleDelete = async (id) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this customer?"
+    );
+
+    if (!confirmDelete) {
+      return;
     }
 
-    // ADD
-    else {
+    try {
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+      });
 
-      setCustomers((currentCustomers) => [
-        ...currentCustomers,
-        {
-          id: Date.now(),
-          ...customerData,
-        },
-      ]);
+      const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to delete customer"
+        );
+      }
+
+      alert("Customer deleted successfully");
+
+      await loadCustomers();
+    } catch (error) {
+      console.error("Delete customer error:", error);
+
+      alert(
+        error.message ||
+          "Something went wrong while deleting customer"
+      );
     }
+  };
 
+  // ==========================================
+  // RESET FORM
+  // ==========================================
+  const handleReset = () => {
     setForm({
       name: "",
       phone: "",
@@ -125,64 +250,17 @@ function Customers({ customers, setCustomers }) {
     setShowForm(false);
   };
 
-  // =========================
-  // DELETE
-  // =========================
-
-  const handleDelete = (id) => {
-
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this customer?"
-    );
-
-    if (!confirmDelete) {
-      return;
-    }
-
-    setCustomers((currentCustomers) =>
-      currentCustomers.filter(
-        (customer) => customer.id !== id
-      )
-    );
-  };
-
-  // =========================
-  // RESET
-  // =========================
-
-  const handleReset = () => {
-
-    const confirmReset = window.confirm(
-      "Are you sure you want to reset all customers?"
-    );
-
-    if (!confirmReset) {
-      return;
-    }
-
-    setCustomers([]);
-  };
-
   return (
-
     <div className="page">
 
-      {/* ========================= */}
-      {/* HEADER */}
-      {/* ========================= */}
+      {/* ======================================
+          HEADER
+      ====================================== */}
 
       <div className="page-header">
-
         <div>
-
-          <h1>
-            Customers
-          </h1>
-
-          <p>
-            Manage your coconut customers
-          </p>
-
+          <h1>Customers</h1>
+          <p>Manage your coconut customers</p>
         </div>
 
         <div className="page-actions">
@@ -204,20 +282,16 @@ function Customers({ customers, setCustomers }) {
           </button>
 
         </div>
-
       </div>
 
-      {/* ========================= */}
-      {/* SUMMARY */}
-      {/* ========================= */}
+      {/* ======================================
+          SUMMARY
+      ====================================== */}
 
       <div className="stock-summary">
 
         <div className="summary-card">
-
-          <span>
-            Total Customers
-          </span>
+          <span>Total Customers</span>
 
           <strong>
             {customers.length.toLocaleString()}
@@ -226,14 +300,10 @@ function Customers({ customers, setCustomers }) {
           <small>
             Registered customers
           </small>
-
         </div>
 
         <div className="summary-card">
-
-          <span>
-            Active Customers
-          </span>
+          <span>Active Customers</span>
 
           <strong>
             {customers.length.toLocaleString()}
@@ -242,14 +312,10 @@ function Customers({ customers, setCustomers }) {
           <small>
             Currently registered
           </small>
-
         </div>
 
         <div className="summary-card">
-
-          <span>
-            Customer Records
-          </span>
+          <span>Customer Records</span>
 
           <strong>
             {customers.length.toLocaleString()}
@@ -258,17 +324,15 @@ function Customers({ customers, setCustomers }) {
           <small>
             Total records
           </small>
-
         </div>
 
       </div>
 
-      {/* ========================= */}
-      {/* ADD / EDIT FORM */}
-      {/* ========================= */}
+      {/* ======================================
+          ADD / EDIT FORM
+      ====================================== */}
 
       {showForm && (
-
         <div className="form-card">
 
           <h2>
@@ -282,7 +346,6 @@ function Customers({ customers, setCustomers }) {
             <div className="form-grid">
 
               {/* NAME */}
-
               <div className="form-group">
 
                 <label>
@@ -300,7 +363,6 @@ function Customers({ customers, setCustomers }) {
               </div>
 
               {/* PHONE */}
-
               <div className="form-group">
 
                 <label>
@@ -318,7 +380,6 @@ function Customers({ customers, setCustomers }) {
               </div>
 
               {/* ADDRESS */}
-
               <div className="form-group">
 
                 <label>
@@ -366,12 +427,11 @@ function Customers({ customers, setCustomers }) {
           </form>
 
         </div>
-
       )}
 
-      {/* ========================= */}
-      {/* CUSTOMER TABLE */}
-      {/* ========================= */}
+      {/* ======================================
+          CUSTOMER TABLE
+      ====================================== */}
 
       <div className="stock-table-card">
 
@@ -387,13 +447,29 @@ function Customers({ customers, setCustomers }) {
 
         </div>
 
-        {customers.length === 0 ? (
+        {/* LOADING */}
+
+        {loading ? (
 
           <div className="empty-state">
 
-            <div>
-              👥
-            </div>
+            <h3>
+              Loading Customers...
+            </h3>
+
+            <p>
+              Please wait.
+            </p>
+
+          </div>
+
+        ) : customers.length === 0 ? (
+
+          /* NO CUSTOMERS */
+
+          <div className="empty-state">
+
+            <div>👥</div>
 
             <h3>
               No Customers Available
@@ -406,6 +482,8 @@ function Customers({ customers, setCustomers }) {
           </div>
 
         ) : (
+
+          /* CUSTOMER TABLE */
 
           <div className="table-container">
 
@@ -441,6 +519,8 @@ function Customers({ customers, setCustomers }) {
 
                   <tr key={customer.id}>
 
+                    {/* CUSTOMER */}
+
                     <td>
 
                       <strong>
@@ -448,6 +528,8 @@ function Customers({ customers, setCustomers }) {
                       </strong>
 
                     </td>
+
+                    {/* PHONE */}
 
                     <td>
 
@@ -459,10 +541,13 @@ function Customers({ customers, setCustomers }) {
                         }}
                       >
                         <Phone size={15} />
+
                         {customer.phone}
                       </span>
 
                     </td>
+
+                    {/* ADDRESS */}
 
                     <td>
 
@@ -474,10 +559,13 @@ function Customers({ customers, setCustomers }) {
                         }}
                       >
                         <MapPin size={15} />
+
                         {customer.address || "-"}
                       </span>
 
                     </td>
+
+                    {/* ACTIONS */}
 
                     <td>
 
@@ -496,9 +584,7 @@ function Customers({ customers, setCustomers }) {
                         <button
                           className="delete-btn"
                           onClick={() =>
-                            handleDelete(
-                              customer.id
-                            )
+                            handleDelete(customer.id)
                           }
                           title="Delete"
                         >
