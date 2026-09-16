@@ -6,7 +6,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://https://jayaraman-coconuts-8rvj.onrender.com/api";
 
 function Sales({ sales, setSales }) {
   const [showForm, setShowForm] = useState(false);
