@@ -18,7 +18,7 @@ import Settings from "./components/settings";
 import "./App.css";
 
 // Backend API URL
-const API_BASE = "https://jayaraman-coconuts-8rvj.onrender.com";
+const API_BASE = "https://jayaraman-coconuts-8rvj.onrender.com/api";
 
 function App() {
   // =====================================================
