@@ -24,7 +24,7 @@ function Stock({ stocks, setStocks }) {
   const fetchStocks = async () => {
     try {
       const response = await fetch(
-        "http://https://jayaraman-coconuts-8rvj.onrender.com/api/stocks"
+        ""https://jayaraman-coconuts-8rvj.onrender.com/api/stocks""
       );
 
       const result = await response.json();
@@ -142,7 +142,7 @@ function Stock({ stocks, setStocks }) {
       // UPDATE
       if (editId !== null) {
         response = await fetch(
-          `http://https://jayaraman-coconuts-8rvj.onrender.com/api/stocks/${editId}`,
+          "https://jayaraman-coconuts-8rvj.onrender.com/api/stocks/${editId}",
           {
             method: "PUT",
             headers: {
@@ -156,7 +156,7 @@ function Stock({ stocks, setStocks }) {
       // ADD
       else {
         response = await fetch(
-          "http://https://jayaraman-coconuts-8rvj.onrender.com/api/stocks",
+          "https://jayaraman-coconuts-8rvj.onrender.com/api/stocks",
           {
             method: "POST",
             headers: {
@@ -209,7 +209,7 @@ function Stock({ stocks, setStocks }) {
 
     try {
       const response = await fetch(
-        `http://https://jayaraman-coconuts-8rvj.onrender.com/api/stocks/${id}`,
+        "https://jayaraman-coconuts-8rvj.onrender.com/api/stocks/${id}",
         {
           method: "DELETE",
         }

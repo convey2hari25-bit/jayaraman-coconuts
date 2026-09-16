@@ -11,7 +11,7 @@ import {
 // Backend API URL
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  "http://https://jayaraman-coconuts-8rvj.onrender.com/api/customers";
+  "https://jayaraman-coconuts-8rvj.onrender.com/api/customers";
 
 function Customers({ customers = [], setCustomers }) {
   const [showForm, setShowForm] = useState(false);
@@ -50,7 +50,7 @@ function Customers({ customers = [], setCustomers }) {
 
       alert(
         "Cannot connect to customer API.\n\n" +
-        "Make sure backend is running on http://https://jayaraman-coconuts-8rvj.onrender.com"
+        "Make sure backend is running on "https://jayaraman-coconuts-8rvj.onrender.com"
       );
     } finally {
       setLoading(false);
