@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 import {
   LayoutDashboard,
@@ -8,6 +9,7 @@ import {
   BarChart3,
   Settings as SettingsIcon,
   LogOut,
+  Building2,
 } from "lucide-react";
 
 import Login from "./components/Login";
@@ -21,6 +23,10 @@ import "./App.css";
 
 // Backend API URL
 const API_BASE = "https://jayaraman-coconuts-8rvj.onrender.com/api";
+
+// Google Client ID
+const GOOGLE_CLIENT_ID =
+  "377889426189-maointfke4a7sts66pbunpffe65kjig3.apps.googleusercontent.com";
 
 function App() {
   // =====================================================
@@ -102,9 +108,9 @@ function App() {
   // =====================================================
 
   const [settings, setSettings] = useState({
-    businessName: "Jayaraman Coconuts",
-    businessType: "Coconut Business",
-    ownerName: "Jayaraman",
+    businessName: "BizFlow",
+    businessType: "Business",
+    ownerName: "Business Owner",
     phone: "",
     address: "",
     currency: "INR",
@@ -212,10 +218,8 @@ function App() {
       return;
     }
 
-    // First load
     loadDashboardData();
 
-    // Every 5 seconds
     const refreshInterval = setInterval(() => {
       loadDashboardData();
     }, 5000);
@@ -344,7 +348,11 @@ function App() {
   // =====================================================
 
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <Login onLogin={handleLogin} />
+      </GoogleOAuthProvider>
+    );
   }
 
   // =====================================================
@@ -382,17 +390,12 @@ function App() {
         {/* LOGO / BUSINESS */}
 
         <div className="sidebar-brand">
-          <div className="brand-logo">🥥</div>
+          <div className="brand-logo">
+            <Building2 size={24} strokeWidth={2.2} />
+          </div>
 
           <div>
-            <h2>
-              {settings.businessName.replace(
-                " Coconuts",
-                ""
-              )}
-            </h2>
-
-            <span>Coconuts</span>
+            <h2>{settings.businessName}</h2>
           </div>
         </div>
 
@@ -495,7 +498,9 @@ function App() {
                 </div>
 
                 <div>
-                  <strong>{user?.name || settings.ownerName}</strong>
+                  <strong>
+                    {user?.name || settings.ownerName}
+                  </strong>
 
                   <p
                     style={{
@@ -527,8 +532,6 @@ function App() {
             {/* SUMMARY CARDS */}
 
             <div className="stock-summary">
-              {/* TOTAL STOCK */}
-
               <div className="summary-card">
                 <span>Total Stock</span>
 
@@ -536,10 +539,8 @@ function App() {
                   {totalStock.toLocaleString()}
                 </strong>
 
-                <small>Coconuts available</small>
+                <small>Products available</small>
               </div>
-
-              {/* TOTAL SALES */}
 
               <div className="summary-card">
                 <span>Total Sales</span>
@@ -551,8 +552,6 @@ function App() {
                 <small>Total revenue</small>
               </div>
 
-              {/* CUSTOMERS */}
-
               <div className="summary-card">
                 <span>Total Customers</span>
 
@@ -562,8 +561,6 @@ function App() {
 
                 <small>Registered customers</small>
               </div>
-
-              {/* STOCK TYPES */}
 
               <div className="summary-card">
                 <span>Stock Types</span>
@@ -588,7 +585,7 @@ function App() {
                 <div>
                   <h2>Recent Sales</h2>
 
-                  <p>Latest coconut sales</p>
+                  <p>Latest sales</p>
                 </div>
 
                 <button

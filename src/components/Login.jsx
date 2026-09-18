@@ -8,6 +8,7 @@ import {
   Package,
   TrendingUp,
 } from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
 
 const API_BASE = "https://jayaraman-coconuts-8rvj.onrender.com/api";
 
@@ -15,7 +16,12 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // =====================================================
+  // NORMAL EMAIL / PASSWORD LOGIN
+  // =====================================================
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,6 +65,57 @@ function Login({ onLogin }) {
     }
   };
 
+  // =====================================================
+  // GOOGLE LOGIN
+  // =====================================================
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      setError("");
+      setGoogleLoading(true);
+
+      if (!credentialResponse?.credential) {
+        throw new Error("Google credential not received");
+      }
+
+      const response = await fetch(`${API_BASE}/auth/google`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          credential: credentialResponse.credential,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Google authentication failed"
+        );
+      }
+
+      // Save BizFlow JWT
+      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Open dashboard
+      onLogin(data.user);
+    } catch (err) {
+      console.error("Google login error:", err);
+      setError(
+        err.message || "Google authentication failed"
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    setError("Google Sign-In failed. Please try again.");
+  };
+
   return (
     <div className="bizflow-login">
       {/* Animated background elements */}
@@ -66,7 +123,9 @@ function Login({ onLogin }) {
       <div className="login-orb login-orb-two"></div>
 
       <div className="login-container">
+        {/* ================================================= */}
         {/* LEFT BUSINESS PANEL */}
+        {/* ================================================= */}
 
         <div className="login-brand-panel">
           <div className="brand-content">
@@ -93,9 +152,12 @@ function Login({ onLogin }) {
                 <div className="feature-icon">
                   <BarChart3 size={20} />
                 </div>
+
                 <div>
                   <strong>Business Analytics</strong>
-                  <span>Understand your business performance</span>
+                  <span>
+                    Understand your business performance
+                  </span>
                 </div>
               </div>
 
@@ -103,9 +165,12 @@ function Login({ onLogin }) {
                 <div className="feature-icon">
                   <Package size={20} />
                 </div>
+
                 <div>
                   <strong>Inventory Management</strong>
-                  <span>Track products and stock effortlessly</span>
+                  <span>
+                    Track products and stock effortlessly
+                  </span>
                 </div>
               </div>
 
@@ -113,16 +178,21 @@ function Login({ onLogin }) {
                 <div className="feature-icon">
                   <TrendingUp size={20} />
                 </div>
+
                 <div>
                   <strong>Sales & Growth</strong>
-                  <span>Monitor sales and business growth</span>
+                  <span>
+                    Monitor sales and business growth
+                  </span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
+        {/* ================================================= */}
         {/* LOGIN PANEL */}
+        {/* ================================================= */}
 
         <div className="login-form-panel">
           <div className="login-card">
@@ -142,6 +212,76 @@ function Login({ onLogin }) {
               </p>
             </div>
 
+            {/* ================================================= */}
+            {/* GOOGLE LOGIN */}
+            {/* ================================================= */}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginBottom: "18px",
+                minHeight: "44px",
+              }}
+            >
+              {googleLoading ? (
+                <div
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: "600",
+                  }}
+                >
+                  Signing in with Google...
+                </div>
+              ) : (
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  useOneTap={false}
+                  theme="outline"
+                  size="large"
+                  text="continue_with"
+                  shape="rectangular"
+                  width="350"
+                />
+              )}
+            </div>
+
+            {/* DIVIDER */}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                margin: "8px 0 20px",
+                color: "#999",
+                fontSize: "13px",
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  height: "1px",
+                  background: "#e5e5e5",
+                }}
+              />
+
+              <span>OR</span>
+
+              <div
+                style={{
+                  flex: 1,
+                  height: "1px",
+                  background: "#e5e5e5",
+                }}
+              />
+            </div>
+
+            {/* ================================================= */}
+            {/* EMAIL / PASSWORD */}
+            {/* ================================================= */}
+
             <form onSubmit={handleSubmit}>
               {/* EMAIL */}
 
@@ -154,7 +294,9 @@ function Login({ onLogin }) {
                   <input
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) =>
+                      setEmail(e.target.value)
+                    }
                     placeholder="you@example.com"
                     autoComplete="email"
                   />
@@ -172,7 +314,9 @@ function Login({ onLogin }) {
                   <input
                     type="password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) =>
+                      setPassword(e.target.value)
+                    }
                     placeholder="Enter your password"
                     autoComplete="current-password"
                   />
@@ -186,7 +330,9 @@ function Login({ onLogin }) {
                   type="button"
                   className="forgot-button"
                   onClick={() =>
-                    setError("Password reset with OTP will be available soon.")
+                    setError(
+                      "Password reset with OTP will be available soon."
+                    )
                   }
                 >
                   Forgot password?
@@ -215,6 +361,8 @@ function Login({ onLogin }) {
                 {!loading && <ArrowRight size={19} />}
               </button>
             </form>
+
+            {/* FOOTER */}
 
             <div className="login-footer">
               <span>Secure business access</span>
