@@ -136,6 +136,33 @@ router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check whether customer exists
+    const [customers] = await db.query(
+      "SELECT id FROM customers WHERE id = ?",
+      [id]
+    );
+
+    if (customers.length === 0) {
+      return res.status(404).json({
+        message: "Customer not found",
+      });
+    }
+
+    // Check whether customer has sales history
+    const [sales] = await db.query(
+      "SELECT id FROM sales WHERE customer_id = ? LIMIT 1",
+      [id]
+    );
+
+    // Don't delete customer if sales history exists
+    if (sales.length > 0) {
+      return res.status(400).json({
+        message:
+          "Customer cannot be deleted because sales history exists",
+      });
+    }
+
+    // Delete customer if no sales history exists
     const [result] = await db.query(
       "DELETE FROM customers WHERE id = ?",
       [id]
