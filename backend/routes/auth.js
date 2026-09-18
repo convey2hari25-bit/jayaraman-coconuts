@@ -1,9 +1,17 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { OAuth2Client } = require("google-auth-library");
 
 const router = express.Router();
 const db = require("../db");
+
+// ===============================
+// GOOGLE CLIENT
+// ===============================
+const googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID
+);
 
 // ===============================
 // TEST AUTH ROUTE
@@ -139,6 +147,128 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Login failed",
+      error: error.message,
+    });
+  }
+});
+
+// ===============================
+// GOOGLE LOGIN
+// ===============================
+router.post("/google", async (req, res) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({
+        success: false,
+        message: "Google credential is required",
+      });
+    }
+
+    // Verify Google ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid Google credential",
+      });
+    }
+
+    const {
+      sub: googleId,
+      email,
+      name,
+      picture,
+      email_verified,
+    } = payload;
+
+    if (!email || !email_verified) {
+      return res.status(401).json({
+        success: false,
+        message: "Google email is not verified",
+      });
+    }
+
+    // Check whether user already exists
+    const [users] = await db.query(
+      "SELECT * FROM users WHERE email = ?",
+      [email]
+    );
+
+    let user;
+
+    if (users.length > 0) {
+      // Existing user
+      user = users[0];
+    } else {
+      // New Google user
+      //
+      // Existing users table requires password,
+      // so generate a random hash for Google accounts.
+      const randomPassword = `${googleId}-${Date.now()}-${Math.random()}`;
+      const hashedPassword = await bcrypt.hash(
+        randomPassword,
+        12
+      );
+
+      const [result] = await db.query(
+        `INSERT INTO users
+         (name, email, password, phone)
+         VALUES (?, ?, ?, ?)`,
+        [
+          name || "Google User",
+          email,
+          hashedPassword,
+          null,
+        ]
+      );
+
+      user = {
+        id: result.insertId,
+        name: name || "Google User",
+        email,
+        phone: null,
+      };
+    }
+
+    // Create BizFlow JWT
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "Google login successful",
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || null,
+        picture: picture || null,
+      },
+    });
+  } catch (error) {
+    console.error("Google login error:", error);
+
+    res.status(401).json({
+      success: false,
+      message: "Google authentication failed",
       error: error.message,
     });
   }
