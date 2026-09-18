@@ -7,8 +7,10 @@ import {
   Users,
   BarChart3,
   Settings as SettingsIcon,
+  LogOut,
 } from "lucide-react";
 
+import Login from "./components/Login";
 import Stock from "./components/stocks";
 import Sales from "./components/sales";
 import Customers from "./components/customers";
@@ -21,6 +23,66 @@ import "./App.css";
 const API_BASE = "https://jayaraman-coconuts-8rvj.onrender.com/api";
 
 function App() {
+  // =====================================================
+  // AUTHENTICATION
+  // =====================================================
+
+  const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+
+  // Check existing login session
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+
+        if (!token) {
+          setAuthChecking(false);
+          return;
+        }
+
+        const response = await fetch(`${API_BASE}/auth/me`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          setUser(data.user);
+        } else {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("user");
+          setUser(null);
+        }
+      } catch (error) {
+        console.error("Authentication check failed:", error);
+
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("user");
+        setUser(null);
+      } finally {
+        setAuthChecking(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // Login success
+  const handleLogin = (loggedInUser) => {
+    setUser(loggedInUser);
+  };
+
+  // Logout
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("user");
+    setUser(null);
+  };
+
   // =====================================================
   // ACTIVE PAGE
   // =====================================================
@@ -73,18 +135,38 @@ function App() {
   };
 
   // =====================================================
-  // LOAD DATA FROM RAILWAY CLOUD MYSQL
+  // LOAD DATA FROM CLOUD MYSQL
   // =====================================================
 
   const loadDashboardData = useCallback(async () => {
     try {
       setApiError("");
 
+      const token = localStorage.getItem("authToken");
+
+      if (!token) {
+        return;
+      }
+
       const [stocksResponse, salesResponse, customersResponse] =
         await Promise.all([
-          fetch(`${API_BASE}/stocks`),
-          fetch(`${API_BASE}/sales`),
-          fetch(`${API_BASE}/customers`),
+          fetch(`${API_BASE}/stocks`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+
+          fetch(`${API_BASE}/sales`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
+
+          fetch(`${API_BASE}/customers`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }),
         ]);
 
       if (!stocksResponse.ok) {
@@ -109,7 +191,7 @@ function App() {
 
       setLoading(false);
 
-      console.log("Dashboard data loaded from Railway Cloud MySQL");
+      console.log("Dashboard data loaded from cloud MySQL");
     } catch (error) {
       console.error("Dashboard API Error:", error);
 
@@ -126,10 +208,14 @@ function App() {
   // =====================================================
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     // First load
     loadDashboardData();
 
-    // Every 5 seconds data refresh aagum
+    // Every 5 seconds
     const refreshInterval = setInterval(() => {
       loadDashboardData();
     }, 5000);
@@ -137,7 +223,7 @@ function App() {
     return () => {
       clearInterval(refreshInterval);
     };
-  }, [loadDashboardData]);
+  }, [user, loadDashboardData]);
 
   // =====================================================
   // DASHBOARD CALCULATIONS
@@ -233,6 +319,35 @@ function App() {
   };
 
   // =====================================================
+  // AUTH CHECKING SCREEN
+  // =====================================================
+
+  if (authChecking) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "20px",
+          fontWeight: "600",
+        }}
+      >
+        Checking login...
+      </div>
+    );
+  }
+
+  // =====================================================
+  // LOGIN SCREEN
+  // =====================================================
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  // =====================================================
   // LOADING SCREEN
   // =====================================================
 
@@ -304,6 +419,31 @@ function App() {
             );
           })}
         </nav>
+
+        {/* LOGOUT */}
+
+        <div
+          style={{
+            marginTop: "auto",
+            padding: "16px",
+          }}
+        >
+          <button
+            onClick={handleLogout}
+            className="nav-item"
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              cursor: "pointer",
+            }}
+          >
+            <LogOut size={21} />
+
+            <span>Logout</span>
+          </button>
+        </div>
       </aside>
 
       {/* ================================================= */}
@@ -349,15 +489,13 @@ function App() {
                     fontSize: "18px",
                   }}
                 >
-                  {settings.ownerName
-                    ? settings.ownerName
-                        .charAt(0)
-                        .toUpperCase()
-                    : "J"}
+                  {user?.name
+                    ? user.name.charAt(0).toUpperCase()
+                    : "U"}
                 </div>
 
                 <div>
-                  <strong>{settings.ownerName}</strong>
+                  <strong>{user?.name || settings.ownerName}</strong>
 
                   <p
                     style={{
