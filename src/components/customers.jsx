@@ -50,7 +50,7 @@ function Customers({ customers = [], setCustomers }) {
 
       alert(
         "Cannot connect to customer API.\n\n" +
-        "Make sure backend is running on "https://jayaraman-coconuts-8rvj.onrender.com"
+        "Make sure backend is running on https://jayaraman-coconuts-8rvj.onrender.com"
       );
     } finally {
       setLoading(false);

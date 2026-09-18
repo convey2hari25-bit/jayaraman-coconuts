@@ -24,7 +24,7 @@ function Stock({ stocks, setStocks }) {
   const fetchStocks = async () => {
     try {
       const response = await fetch(
-        ""https://jayaraman-coconuts-8rvj.onrender.com/api/stocks""
+        "https://jayaraman-coconuts-8rvj.onrender.com/api/stocks"
       );
 
       const result = await response.json();
