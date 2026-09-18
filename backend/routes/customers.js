@@ -150,7 +150,7 @@ router.delete("/:id", async (req, res) => {
 
     // Check whether customer has sales history
     const [sales] = await db.query(
-      "SELECT id FROM sales WHERE customer_id = ? LIMIT 1",
+      "SELECT id FROM sales WHERE customer_id = ? AND deleted = 0 LIMIT 1",
       [id]
     );
 
