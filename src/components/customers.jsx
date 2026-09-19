@@ -8,7 +8,9 @@ import {
   MapPin,
 } from "lucide-react";
 
+// ==========================================
 // Backend API URL
+// ==========================================
 const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://jayaraman-coconuts-8rvj.onrender.com/api/customers";
@@ -25,32 +27,60 @@ function Customers({ customers = [], setCustomers }) {
   });
 
   // ==========================================
+  // GET AUTH TOKEN
+  // ==========================================
+  const getToken = () => {
+    return (
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("token")
+    );
+  };
+
+  // ==========================================
   // LOAD CUSTOMERS FROM MYSQL
   // ==========================================
   const loadCustomers = async () => {
     try {
       setLoading(true);
 
-      const response = await fetch(API_URL);
+      const token = getToken();
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch customers");
+      if (!token) {
+        throw new Error("Authentication required");
       }
 
-      const data = await response.json();
+      const response = await fetch(API_URL, {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-      // Make sure response is an array
-      if (!Array.isArray(data)) {
-        throw new Error("Invalid customer data received");
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message ||
+            "Failed to fetch customers"
+        );
       }
 
-      setCustomers(data);
+      const customerData = Array.isArray(
+        result.data
+      )
+        ? result.data
+        : [];
+
+      setCustomers(customerData);
     } catch (error) {
-      console.error("Load customers error:", error);
+      console.error(
+        "Load customers error:",
+        error
+      );
 
       alert(
-        "Cannot connect to customer API.\n\n" +
-        "Make sure backend is running on https://jayaraman-coconuts-8rvj.onrender.com"
+        error.message ||
+          "Cannot connect to customer API."
       );
     } finally {
       setLoading(false);
@@ -129,27 +159,51 @@ function Customers({ customers = [], setCustomers }) {
     };
 
     try {
+      setLoading(true);
+
+      const token = getToken();
+
+      if (!token) {
+        throw new Error(
+          "Authentication required"
+        );
+      }
+
       // ======================================
       // UPDATE CUSTOMER
       // ======================================
       if (editId !== null) {
-        const response = await fetch(`${API_URL}/${editId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(customerData),
-        });
+        const response = await fetch(
+          `${API_URL}/${editId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(
+              customerData
+            ),
+          }
+        );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
-        if (!response.ok) {
+        if (
+          !response.ok ||
+          !data.success
+        ) {
           throw new Error(
-            data.message || "Failed to update customer"
+            data.message ||
+              "Failed to update customer"
           );
         }
 
-        alert("Customer updated successfully");
+        alert(
+          "Customer updated successfully"
+        );
 
         await loadCustomers();
       }
@@ -158,23 +212,37 @@ function Customers({ customers = [], setCustomers }) {
       // ADD CUSTOMER
       // ======================================
       else {
-        const response = await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(customerData),
-        });
+        const response = await fetch(
+          API_URL,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(
+              customerData
+            ),
+          }
+        );
 
-        const data = await response.json();
+        const data =
+          await response.json();
 
-        if (!response.ok) {
+        if (
+          !response.ok ||
+          !data.success
+        ) {
           throw new Error(
-            data.message || "Failed to add customer"
+            data.message ||
+              "Failed to add customer"
           );
         }
 
-        alert("Customer added successfully");
+        alert(
+          "Customer added successfully"
+        );
 
         await loadCustomers();
       }
@@ -189,12 +257,17 @@ function Customers({ customers = [], setCustomers }) {
       setEditId(null);
       setShowForm(false);
     } catch (error) {
-      console.error("Save customer error:", error);
+      console.error(
+        "Save customer error:",
+        error
+      );
 
       alert(
         error.message ||
           "Something went wrong while saving customer"
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -202,37 +275,66 @@ function Customers({ customers = [], setCustomers }) {
   // DELETE CUSTOMER
   // ==========================================
   const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this customer?"
-    );
+    const confirmDelete =
+      window.confirm(
+        "Are you sure you want to delete this customer?"
+      );
 
     if (!confirmDelete) {
       return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/${id}`, {
-        method: "DELETE",
-      });
+      setLoading(true);
 
-      const data = await response.json();
+      const token = getToken();
 
-      if (!response.ok) {
+      if (!token) {
         throw new Error(
-          data.message || "Failed to delete customer"
+          "Authentication required"
         );
       }
 
-      alert("Customer deleted successfully");
+      const response = await fetch(
+        `${API_URL}/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !data.success
+      ) {
+        throw new Error(
+          data.message ||
+            "Failed to delete customer"
+        );
+      }
+
+      alert(
+        "Customer deleted successfully"
+      );
 
       await loadCustomers();
     } catch (error) {
-      console.error("Delete customer error:", error);
+      console.error(
+        "Delete customer error:",
+        error
+      );
 
       alert(
         error.message ||
           "Something went wrong while deleting customer"
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -253,21 +355,20 @@ function Customers({ customers = [], setCustomers }) {
   return (
     <div className="page">
 
-      {/* ======================================
-          HEADER
-      ====================================== */}
-
+      {/* HEADER */}
       <div className="page-header">
         <div>
           <h1>Customers</h1>
-          <p>Manage your coconut customers</p>
+          <p>
+            Manage your coconut customers
+          </p>
         </div>
 
         <div className="page-actions">
-
           <button
             className="reset-btn"
             onClick={handleReset}
+            disabled={loading}
           >
             <RotateCcw size={17} />
             Reset
@@ -276,18 +377,15 @@ function Customers({ customers = [], setCustomers }) {
           <button
             className="add-btn"
             onClick={openAddForm}
+            disabled={loading}
           >
             <Plus size={18} />
             Add Customer
           </button>
-
         </div>
       </div>
 
-      {/* ======================================
-          SUMMARY
-      ====================================== */}
-
+      {/* SUMMARY */}
       <div className="stock-summary">
 
         <div className="summary-card">
@@ -328,10 +426,7 @@ function Customers({ customers = [], setCustomers }) {
 
       </div>
 
-      {/* ======================================
-          ADD / EDIT FORM
-      ====================================== */}
-
+      {/* ADD / EDIT FORM */}
       {showForm && (
         <div className="form-card">
 
@@ -399,7 +494,6 @@ function Customers({ customers = [], setCustomers }) {
             </div>
 
             {/* BUTTONS */}
-
             <div className="form-buttons">
 
               <button
@@ -416,8 +510,11 @@ function Customers({ customers = [], setCustomers }) {
               <button
                 type="submit"
                 className="save-btn"
+                disabled={loading}
               >
-                {editId !== null
+                {loading
+                  ? "Saving..."
+                  : editId !== null
                   ? "Save Changes"
                   : "Add Customer"}
               </button>
@@ -429,10 +526,7 @@ function Customers({ customers = [], setCustomers }) {
         </div>
       )}
 
-      {/* ======================================
-          CUSTOMER TABLE
-      ====================================== */}
-
+      {/* CUSTOMER TABLE */}
       <div className="stock-table-card">
 
         <div className="table-title">
@@ -448,7 +542,6 @@ function Customers({ customers = [], setCustomers }) {
         </div>
 
         {/* LOADING */}
-
         {loading ? (
 
           <div className="empty-state">
@@ -466,7 +559,6 @@ function Customers({ customers = [], setCustomers }) {
         ) : customers.length === 0 ? (
 
           /* NO CUSTOMERS */
-
           <div className="empty-state">
 
             <div>👥</div>
@@ -484,7 +576,6 @@ function Customers({ customers = [], setCustomers }) {
         ) : (
 
           /* CUSTOMER TABLE */
-
           <div className="table-container">
 
             <table>
@@ -515,89 +606,110 @@ function Customers({ customers = [], setCustomers }) {
 
               <tbody>
 
-                {customers.map((customer) => (
+                {customers.map(
+                  (customer) => (
 
-                  <tr key={customer.id}>
+                    <tr
+                      key={customer.id}
+                    >
 
-                    {/* CUSTOMER */}
+                      {/* CUSTOMER */}
+                      <td>
 
-                    <td>
+                        <strong>
+                          {customer.name}
+                        </strong>
 
-                      <strong>
-                        {customer.name}
-                      </strong>
+                      </td>
 
-                    </td>
+                      {/* PHONE */}
+                      <td>
 
-                    {/* PHONE */}
-
-                    <td>
-
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "7px",
-                        }}
-                      >
-                        <Phone size={15} />
-
-                        {customer.phone}
-                      </span>
-
-                    </td>
-
-                    {/* ADDRESS */}
-
-                    <td>
-
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "7px",
-                        }}
-                      >
-                        <MapPin size={15} />
-
-                        {customer.address || "-"}
-                      </span>
-
-                    </td>
-
-                    {/* ACTIONS */}
-
-                    <td>
-
-                      <div className="action-buttons">
-
-                        <button
-                          className="edit-btn"
-                          onClick={() =>
-                            handleEdit(customer)
-                          }
-                          title="Edit"
+                        <span
+                          style={{
+                            display:
+                              "flex",
+                            alignItems:
+                              "center",
+                            gap: "7px",
+                          }}
                         >
-                          <Pencil size={16} />
-                        </button>
 
-                        <button
-                          className="delete-btn"
-                          onClick={() =>
-                            handleDelete(customer.id)
-                          }
-                          title="Delete"
+                          <Phone
+                            size={15}
+                          />
+
+                          {customer.phone}
+
+                        </span>
+
+                      </td>
+
+                      {/* ADDRESS */}
+                      <td>
+
+                        <span
+                          style={{
+                            display:
+                              "flex",
+                            alignItems:
+                              "center",
+                            gap: "7px",
+                          }}
                         >
-                          <Trash2 size={16} />
-                        </button>
 
-                      </div>
+                          <MapPin
+                            size={15}
+                          />
 
-                    </td>
+                          {customer.address ||
+                            "-"}
 
-                  </tr>
+                        </span>
 
-                ))}
+                      </td>
+
+                      {/* ACTIONS */}
+                      <td>
+
+                        <div className="action-buttons">
+
+                          <button
+                            className="edit-btn"
+                            onClick={() =>
+                              handleEdit(
+                                customer
+                              )
+                            }
+                            title="Edit"
+                          >
+                            <Pencil
+                              size={16}
+                            />
+                          </button>
+
+                          <button
+                            className="delete-btn"
+                            onClick={() =>
+                              handleDelete(
+                                customer.id
+                              )
+                            }
+                            title="Delete"
+                          >
+                            <Trash2
+                              size={16}
+                            />
+                          </button>
+
+                        </div>
+
+                      </td>
+
+                    </tr>
+
+                  )
+                )}
 
               </tbody>
 
