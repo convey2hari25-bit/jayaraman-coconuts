@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import Login from "./components/Login";
+import BusinessSetup from "./components/BusinessSetup";
 import Stock from "./components/stocks";
 import Sales from "./components/sales";
 import Customers from "./components/customers";
@@ -58,6 +59,23 @@ function App() {
 
         if (response.ok && data.success) {
           setUser(data.user);
+
+          setSettings((prev) => ({
+            ...prev,
+            businessName:
+              data.user?.business_name || "BizFlow",
+            businessType:
+              data.user?.business_type || "Business",
+            ownerName:
+              data.user?.owner_name ||
+              data.user?.name ||
+              "Business Owner",
+            phone: data.user?.phone || "",
+            address:
+              data.user?.business_address || "",
+            currency:
+              data.user?.currency || "INR",
+          }));
         } else {
           localStorage.removeItem("authToken");
           localStorage.removeItem("user");
@@ -80,6 +98,48 @@ function App() {
   // Login success
   const handleLogin = (loggedInUser) => {
     setUser(loggedInUser);
+
+    setSettings((prev) => ({
+      ...prev,
+      businessName: loggedInUser?.business_name || "BizFlow",
+      businessType: loggedInUser?.business_type || "Business",
+      ownerName:
+        loggedInUser?.owner_name ||
+        loggedInUser?.name ||
+        "Business Owner",
+      phone: loggedInUser?.phone || "",
+      address: loggedInUser?.business_address || "",
+      currency: loggedInUser?.currency || "INR",
+    }));
+
+    setLoading(true);
+  };
+
+  // Business setup completed
+  const handleSetupComplete = (updatedUser) => {
+    setUser(updatedUser);
+
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+
+    setSettings((prev) => ({
+      ...prev,
+      businessName:
+        updatedUser?.business_name || "BizFlow",
+      businessType:
+        updatedUser?.business_type || "Business",
+      ownerName:
+        updatedUser?.owner_name ||
+        updatedUser?.name ||
+        "Business Owner",
+      phone: updatedUser?.phone || "",
+      address:
+        updatedUser?.business_address || "",
+      currency:
+        updatedUser?.currency || "INR",
+    }));
+
+    setActivePage("dashboard");
+    setLoading(true);
   };
 
   // Logout
@@ -352,6 +412,19 @@ function App() {
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
         <Login onLogin={handleLogin} />
       </GoogleOAuthProvider>
+    );
+  }
+
+  // =====================================================
+  // BUSINESS SETUP SCREEN
+  // =====================================================
+
+  if (user && !user.setup_completed) {
+    return (
+      <BusinessSetup
+        user={user}
+        onComplete={handleSetupComplete}
+      />
     );
   }
 

@@ -6,214 +6,70 @@ const { OAuth2Client } = require("google-auth-library");
 const router = express.Router();
 const db = require("../db");
 
-// ===============================
-// GOOGLE CLIENT
-// ===============================
+console.log("AUTH ROUTER FILE LOADED");
+
 const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID
 );
 
-// ===============================
-// TEST AUTH ROUTE
-// ===============================
-router.get("/test", (req, res) => {
-  res.json({
-    success: true,
-    message: "Auth router is working",
-  });
-});
+// =====================================
+// CREATE JWT
+// =====================================
+function createToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: "7d",
+    }
+  );
+}
 
-// ===============================
-// REGISTER
-// ===============================
-router.post("/register", async (req, res) => {
+// =====================================
+// AUTH MIDDLEWARE
+// =====================================
+function authenticateUser(req, res, next) {
   try {
-    const {
-      name,
-      email,
-      password,
-      phone,
-    } = req.body;
+    const authHeader = req.headers.authorization;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, email and password are required",
-      });
-    }
-
-    const [existingUsers] = await db.query(
-      "SELECT id FROM users WHERE email = ?",
-      [email]
-    );
-
-    if (existingUsers.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: "Email already registered",
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(
-      password,
-      12
-    );
-
-    const [result] = await db.query(
-      `INSERT INTO users
-       (name, email, password, phone)
-       VALUES (?, ?, ?, ?)`,
-      [
-        name,
-        email,
-        hashedPassword,
-        phone || null,
-      ]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Registration successful",
-      user: {
-        id: result.insertId,
-        name,
-        email,
-        phone: phone || null,
-        business_name: null,
-        business_type: null,
-        owner_name: name,
-        business_address: null,
-        currency: "INR",
-        region: null,
-        setup_completed: false,
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Registration error:",
-      error
-    );
-
-    res.status(500).json({
-      success: false,
-      message: "Registration failed",
-      error: error.message,
-    });
-  }
-});
-
-// ===============================
-// NORMAL LOGIN
-// ===============================
-router.post("/login", async (req, res) => {
-  try {
-    const {
-      email,
-      password,
-    } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and password are required",
-      });
-    }
-
-    const [users] = await db.query(
-      "SELECT * FROM users WHERE email = ?",
-      [email]
-    );
-
-    if (users.length === 0) {
+    if (
+      !authHeader ||
+      !authHeader.startsWith("Bearer ")
+    ) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password",
+        message: "Authentication required",
       });
     }
 
-    const user = users[0];
+    const token = authHeader.split(" ")[1];
 
-    const passwordMatch =
-      await bcrypt.compare(
-        password,
-        user.password
-      );
-
-    if (!passwordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid email or password",
-      });
-    }
-
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-    res.json({
-      success: true,
-      message: "Login successful",
+    const decoded = jwt.verify(
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone || null,
-
-        business_name:
-          user.business_name || null,
-
-        business_type:
-          user.business_type || null,
-
-        owner_name:
-          user.owner_name ||
-          user.name ||
-          null,
-
-        business_address:
-          user.business_address || null,
-
-        currency:
-          user.currency || "INR",
-
-        region:
-          user.region || null,
-
-        setup_completed:
-          Boolean(user.setup_completed),
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Login error:",
-      error
+      process.env.JWT_SECRET
     );
 
-    res.status(500).json({
+    req.user = decoded;
+
+    next();
+  } catch (error) {
+    return res.status(401).json({
       success: false,
-      message: "Login failed",
-      error: error.message,
+      message: "Invalid or expired token",
     });
   }
-});
+}
 
-// ===============================
+// =====================================
 // GOOGLE LOGIN
-// ===============================
+// =====================================
 router.post("/google", async (req, res) => {
   try {
-    const {
-      credential,
-    } = req.body;
+    const { credential } = req.body;
 
     if (!credential) {
       return res.status(400).json({
@@ -236,8 +92,7 @@ router.post("/google", async (req, res) => {
     if (!payload) {
       return res.status(401).json({
         success: false,
-        message:
-          "Invalid Google credential",
+        message: "Invalid Google token",
       });
     }
 
@@ -246,176 +101,151 @@ router.post("/google", async (req, res) => {
       email,
       name,
       picture,
-      email_verified,
     } = payload;
 
-    if (!email || !email_verified) {
-      return res.status(401).json({
+    if (!email) {
+      return res.status(400).json({
         success: false,
         message:
-          "Google email is not verified",
+          "Google account email not available",
       });
     }
 
     // =====================================
     // CHECK EXISTING USER
     // =====================================
-    const [users] =
+    const [existingUsers] =
       await db.query(
-        "SELECT * FROM users WHERE email = ?",
+        `
+        SELECT *
+        FROM users
+        WHERE email = ?
+        LIMIT 1
+        `,
         [email]
       );
 
     let user;
-    let isNewUser = false;
 
     // =====================================
     // EXISTING USER
     // =====================================
-    if (users.length > 0) {
-      user = users[0];
+    if (existingUsers.length > 0) {
+      user = existingUsers[0];
 
       console.log(
-        "Existing Google user:",
-        email
+        "Existing user login:",
+        user.email
       );
     }
 
     // =====================================
-    // NEW GOOGLE USER
+    // NEW USER
     // =====================================
     else {
-      isNewUser = true;
-
+      // Generate random password because
+      // Google users don't need local password
       const randomPassword =
         `${googleId}-${Date.now()}-${Math.random()}`;
 
       const hashedPassword =
         await bcrypt.hash(
           randomPassword,
-          12
+          10
         );
 
       const [result] =
         await db.query(
-          `INSERT INTO users
-           (
-             name,
-             email,
-             password,
-             phone,
-             business_name,
-             business_type,
-             owner_name,
-             business_address,
-             currency,
-             region,
-             setup_completed
-           )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `
+          INSERT INTO users
+          (
+            name,
+            email,
+            password
+          )
+          VALUES (?, ?, ?)
+          `,
           [
-            name || "Google User",
+            name || "Business Owner",
             email,
             hashedPassword,
-            null,
-            null,
-            null,
-            name || "Google User",
-            null,
-            "INR",
-            null,
-            false,
           ]
         );
 
-      user = {
-        id: result.insertId,
-        name: name || "Google User",
-        email,
-        phone: null,
-        business_name: null,
-        business_type: null,
-        owner_name:
-          name || "Google User",
-        business_address: null,
-        currency: "INR",
-        region: null,
-        setup_completed: false,
-      };
+      const [newUsers] =
+        await db.query(
+          `
+          SELECT *
+          FROM users
+          WHERE id = ?
+          LIMIT 1
+          `,
+          [result.insertId]
+        );
+
+      user = newUsers[0];
 
       console.log(
-        "New Google user created:",
-        email
+        "New user created:",
+        user.email
       );
     }
 
     // =====================================
     // CREATE BIZFLOW JWT
     // =====================================
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
+    const token =
+      createToken(user);
 
     // =====================================
-    // RESPONSE
+    // RETURN USER
     // =====================================
-    res.json({
+    return res.status(200).json({
       success: true,
-      message:
-        "Google login successful",
 
       token,
-
-      isNewUser,
 
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
-        phone: user.phone || null,
-
-        picture:
-          picture || null,
+        phone: user.phone || "",
 
         business_name:
-          user.business_name || null,
+          user.business_name || "",
 
         business_type:
-          user.business_type || null,
+          user.business_type || "",
 
         owner_name:
           user.owner_name ||
           user.name ||
-          null,
+          "",
 
         business_address:
-          user.business_address || null,
+          user.business_address || "",
 
         currency:
           user.currency || "INR",
 
         region:
-          user.region || null,
+          user.region || "",
 
         setup_completed:
-          Boolean(user.setup_completed),
+          Number(
+            user.setup_completed || 0
+          ),
+
+        picture: picture || "",
       },
     });
   } catch (error) {
     console.error(
-      "Google login error:",
+      "Google auth error:",
       error
     );
 
-    res.status(401).json({
+    return res.status(500).json({
       success: false,
       message:
         "Google authentication failed",
@@ -424,162 +254,95 @@ router.post("/google", async (req, res) => {
   }
 });
 
-// ===============================
+// =====================================
 // GET CURRENT USER
-// ===============================
-router.get("/me", async (req, res) => {
-  try {
-    const authHeader =
-      req.headers.authorization;
+// =====================================
+router.get(
+  "/me",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const [users] =
+        await db.query(
+          `
+          SELECT *
+          FROM users
+          WHERE id = ?
+          LIMIT 1
+          `,
+          [req.user.id]
+        );
 
-    if (
-      !authHeader ||
-      !authHeader.startsWith("Bearer ")
-    ) {
-      return res.status(401).json({
+      if (users.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      const user = users[0];
+
+      return res.status(200).json({
+        success: true,
+
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone || "",
+
+          business_name:
+            user.business_name || "",
+
+          business_type:
+            user.business_type || "",
+
+          owner_name:
+            user.owner_name ||
+            user.name ||
+            "",
+
+          business_address:
+            user.business_address || "",
+
+          currency:
+            user.currency || "INR",
+
+          region:
+            user.region || "",
+
+          setup_completed:
+            Number(
+              user.setup_completed || 0
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Get current user error:",
+        error.message
+      );
+
+      return res.status(500).json({
         success: false,
         message:
-          "Authentication required",
+          "Failed to fetch user",
       });
     }
-
-    const token =
-      authHeader.split(" ")[1];
-
-    const decoded =
-      jwt.verify(
-        token,
-        process.env.JWT_SECRET
-      );
-
-    const [users] =
-      await db.query(
-        `SELECT
-          id,
-          name,
-          email,
-          phone,
-          business_name,
-          business_type,
-          owner_name,
-          business_address,
-          currency,
-          region,
-          setup_completed,
-          created_at
-         FROM users
-         WHERE id = ?`,
-        [decoded.id]
-      );
-
-    if (users.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    const user = users[0];
-
-    res.json({
-      success: true,
-      user: {
-        ...user,
-        currency:
-          user.currency || "INR",
-        setup_completed:
-          Boolean(
-            user.setup_completed
-          ),
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Auth verification error:",
-      error
-    );
-
-    res.status(401).json({
-      success: false,
-      message:
-        "Invalid or expired token",
-    });
   }
-});
+);
 
-// ========================================
-// UPDATE BUSINESS PROFILE
-// ========================================
-router.put("/profile", async (req, res) => {
-  try {
-    const authHeader =
-      req.headers.authorization;
+// =====================================
+// UPDATE BUSINESS PROFILE / SETUP
+// =====================================
+router.put(
+  "/profile",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
 
-    if (
-      !authHeader ||
-      !authHeader.startsWith("Bearer ")
-    ) {
-      return res.status(401).json({
-        success: false,
-        message:
-          "Authentication required",
-      });
-    }
-
-    const token =
-      authHeader.split(" ")[1];
-
-    const decoded =
-      jwt.verify(
-        token,
-        process.env.JWT_SECRET
-      );
-
-    const {
-      business_name,
-      business_type,
-      owner_name,
-      phone,
-      business_address,
-      currency,
-      region,
-    } = req.body;
-
-    // =====================================
-    // BASIC VALIDATION
-    // =====================================
-    if (
-      !business_name ||
-      !business_type ||
-      !owner_name ||
-      !phone ||
-      !business_address ||
-      !currency ||
-      !region
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "All business profile fields are required",
-      });
-    }
-
-    // =====================================
-    // UPDATE USER PROFILE
-    // =====================================
-    await db.query(
-      `UPDATE users
-       SET
-         business_name = ?,
-         business_type = ?,
-         owner_name = ?,
-         phone = ?,
-         business_address = ?,
-         currency = ?,
-         region = ?,
-         setup_completed = TRUE
-       WHERE id = ?`,
-      [
+      const {
         business_name,
         business_type,
         owner_name,
@@ -587,72 +350,138 @@ router.put("/profile", async (req, res) => {
         business_address,
         currency,
         region,
-        decoded.id,
-      ]
-    );
+      } = req.body;
 
-    // =====================================
-    // GET UPDATED USER
-    // =====================================
-    const [users] =
+      // Validation
+      if (
+        !business_name ||
+        !business_name.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Business name is required",
+        });
+      }
+
+      if (
+        !business_type ||
+        !business_type.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Business type is required",
+        });
+      }
+
+      // =====================================
+      // UPDATE USER BUSINESS DETAILS
+      // =====================================
       await db.query(
-        `SELECT
-          id,
-          name,
-          email,
-          phone,
-          business_name,
-          business_type,
-          owner_name,
-          business_address,
-          currency,
-          region,
-          setup_completed,
-          created_at
-         FROM users
-         WHERE id = ?`,
-        [decoded.id]
+        `
+        UPDATE users
+        SET
+          business_name = ?,
+          business_type = ?,
+          owner_name = ?,
+          phone = ?,
+          business_address = ?,
+          currency = ?,
+          region = ?,
+          setup_completed = 1
+        WHERE id = ?
+        `,
+        [
+          business_name.trim(),
+          business_type.trim(),
+          owner_name
+            ? owner_name.trim()
+            : "",
+          phone
+            ? phone.trim()
+            : "",
+          business_address
+            ? business_address.trim()
+            : "",
+          currency || "INR",
+          region
+            ? region.trim()
+            : "",
+          userId,
+        ]
       );
 
-    if (users.length === 0) {
-      return res.status(404).json({
+      // =====================================
+      // GET UPDATED USER
+      // =====================================
+      const [users] =
+        await db.query(
+          `
+          SELECT *
+          FROM users
+          WHERE id = ?
+          LIMIT 1
+          `,
+          [userId]
+        );
+
+      const user = users[0];
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Business setup completed successfully",
+
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone || "",
+
+          business_name:
+            user.business_name || "",
+
+          business_type:
+            user.business_type || "",
+
+          owner_name:
+            user.owner_name ||
+            user.name ||
+            "",
+
+          business_address:
+            user.business_address || "",
+
+          currency:
+            user.currency || "INR",
+
+          region:
+            user.region || "",
+
+          setup_completed:
+            Number(
+              user.setup_completed || 0
+            ),
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Business profile update error:",
+        error.message
+      );
+
+      return res.status(500).json({
         success: false,
-        message: "User not found",
+        message:
+          "Failed to save business setup",
+        error: error.message,
       });
     }
-
-    const user = users[0];
-
-    res.json({
-      success: true,
-      message:
-        "Business profile updated successfully",
-
-      user: {
-        ...user,
-        currency:
-          user.currency || "INR",
-        setup_completed:
-          Boolean(
-            user.setup_completed
-          ),
-      },
-    });
-  } catch (error) {
-    console.error(
-      "Profile update error:",
-      error
-    );
-
-    res.status(401).json({
-      success: false,
-      message:
-        "Invalid or expired token",
-    });
   }
-});
+);
 
-// ===============================
-// EXPORT ROUTER
-// ===============================
+// =====================================
+// EXPORT
+// =====================================
 module.exports = router;
