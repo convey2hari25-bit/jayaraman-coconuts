@@ -6,7 +6,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 
-const API_URL = "https://jayaraman-coconuts-8rvj.onrender.com/api";
+const API_URL =
+  "https://jayaraman-coconuts-8rvj.onrender.com/api";
 
 function Sales({ sales, setSales }) {
   const [showForm, setShowForm] = useState(false);
@@ -22,41 +23,82 @@ function Sales({ sales, setSales }) {
   });
 
   // =====================================
+  // GET AUTH TOKEN
+  // =====================================
+  const getToken = () => {
+    return (
+      localStorage.getItem("authToken") ||
+      localStorage.getItem("token")
+    );
+  };
+
+  // =====================================
   // LOAD SALES FROM BACKEND
   // =====================================
-
   const loadSales = async () => {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_URL}/sales`, {
-        cache: "no-store",
-      });
+      const token = getToken();
 
-      if (!response.ok) {
-        throw new Error("Sales API failed");
+      if (!token) {
+        throw new Error("Authentication required");
       }
 
-      const data = await response.json();
+      const response = await fetch(
+        `${API_URL}/sales`,
+        {
+          cache: "no-store",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-      const formattedSales = data.map((sale) => ({
-        id: sale.id,
-        customer: sale.customer || "Unknown Customer",
-        date: sale.date || sale.sale_date?.split("T")[0] || "",
-        quantity: Number(sale.quantity),
-        rate: Number(sale.rate),
-        paid:
-          sale.paid === true ||
-          sale.paid === 1 ||
-          sale.paid === "1",
-        customer_id: sale.customer_id,
-        stock_id: sale.stock_id,
-      }));
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Sales API failed"
+        );
+      }
+
+      const salesData = Array.isArray(result.data)
+        ? result.data
+        : [];
+
+      const formattedSales = salesData.map(
+        (sale) => ({
+          id: sale.id,
+          customer:
+            sale.customer ||
+            "Unknown Customer",
+          date:
+            sale.date ||
+            sale.sale_date?.split("T")[0] ||
+            "",
+          quantity: Number(sale.quantity || 0),
+          rate: Number(sale.rate || 0),
+          paid:
+            sale.paid === true ||
+            sale.paid === 1 ||
+            sale.paid === "1",
+          customer_id: sale.customer_id,
+          stock_id: sale.stock_id,
+        })
+      );
 
       setSales(formattedSales);
     } catch (error) {
-      console.error("Load sales error:", error);
-      alert("Sales data load aagala. Backend running-ah check pannu.");
+      console.error(
+        "Load sales error:",
+        error
+      );
+
+      alert(
+        error.message ||
+          "Sales data load aagala. Backend running-ah check pannu."
+      );
     } finally {
       setLoading(false);
     }
@@ -69,7 +111,6 @@ function Sales({ sales, setSales }) {
   // =====================================
   // INPUT CHANGE
   // =====================================
-
   const handleChange = (e) => {
     setForm({
       ...form,
@@ -80,13 +121,14 @@ function Sales({ sales, setSales }) {
   // =====================================
   // OPEN ADD FORM
   // =====================================
-
   const openAddForm = () => {
     setEditId(null);
 
     setForm({
       customer: "",
-      date: new Date().toISOString().split("T")[0],
+      date: new Date()
+        .toISOString()
+        .split("T")[0],
       quantity: "",
       rate: "",
       paid: "Paid",
@@ -98,7 +140,6 @@ function Sales({ sales, setSales }) {
   // =====================================
   // EDIT SALE
   // =====================================
-
   const handleEdit = (sale) => {
     setEditId(sale.id);
 
@@ -107,7 +148,9 @@ function Sales({ sales, setSales }) {
       date: sale.date,
       quantity: sale.quantity,
       rate: sale.rate,
-      paid: sale.paid ? "Paid" : "Pending",
+      paid: sale.paid
+        ? "Paid"
+        : "Pending",
     });
 
     setShowForm(true);
@@ -116,23 +159,52 @@ function Sales({ sales, setSales }) {
   // =====================================
   // FIND CUSTOMER ID
   // =====================================
+  const getCustomerId = async (
+    customerName
+  ) => {
+    const token = getToken();
 
-  const getCustomerId = async (customerName) => {
-    const response = await fetch(`${API_URL}/customers`, {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error("Customers API failed");
+    if (!token) {
+      throw new Error(
+        "Authentication required"
+      );
     }
 
-    const customers = await response.json();
-
-    const matchedCustomer = customers.find(
-      (customer) =>
-        customer.name.trim().toLowerCase() ===
-        customerName.trim().toLowerCase()
+    const response = await fetch(
+      `${API_URL}/customers`,
+      {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
     );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.message ||
+          "Customers API failed"
+      );
+    }
+
+    const customers = Array.isArray(
+      result.data
+    )
+      ? result.data
+      : [];
+
+    const matchedCustomer =
+      customers.find(
+        (customer) =>
+          customer.name
+            .trim()
+            .toLowerCase() ===
+          customerName
+            .trim()
+            .toLowerCase()
+      );
 
     if (!matchedCustomer) {
       throw new Error(
@@ -144,9 +216,54 @@ function Sales({ sales, setSales }) {
   };
 
   // =====================================
+  // GET USER STOCK
+  // =====================================
+  const getStockId = async () => {
+    const token = getToken();
+
+    if (!token) {
+      throw new Error(
+        "Authentication required"
+      );
+    }
+
+    const response = await fetch(
+      `${API_URL}/stocks`,
+      {
+        cache: "no-store",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.message ||
+          "Stocks API failed"
+      );
+    }
+
+    const stocks = Array.isArray(
+      result.data
+    )
+      ? result.data
+      : [];
+
+    if (stocks.length === 0) {
+      throw new Error(
+        "No stock available. First add stock before creating a sale."
+      );
+    }
+
+    return stocks[0].id;
+  };
+
+  // =====================================
   // ADD / UPDATE SALE
   // =====================================
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -164,7 +281,9 @@ function Sales({ sales, setSales }) {
     const rate = Number(form.rate);
 
     if (quantity <= 0) {
-      alert("Quantity must be greater than 0");
+      alert(
+        "Quantity must be greater than 0"
+      );
       return;
     }
 
@@ -176,73 +295,106 @@ function Sales({ sales, setSales }) {
     try {
       setLoading(true);
 
-      // Customer name-la irundhu customer ID edukkum
-      const customerId = await getCustomerId(form.customer);
+      const token = getToken();
 
-      /*
-        IMPORTANT:
-        Current sales table-ku stock_id required.
-        Existing stock table-la stock ID 1 irukku.
-        So current setup-ku stock_id: 1 use pannrom.
-      */
+      if (!token) {
+        throw new Error(
+          "Authentication required"
+        );
+      }
+
+      const customerId =
+        await getCustomerId(
+          form.customer
+        );
+
+      const stockId =
+        await getStockId();
 
       const salePayload = {
         customer_id: Number(customerId),
-        stock_id: 1,
-        quantity: quantity,
-        rate: rate,
-        paid: form.paid === "Paid" ? 1 : 0,
+        stock_id: Number(stockId),
+        quantity,
+        rate,
+        paid:
+          form.paid === "Paid" ? 1 : 0,
         sale_date: form.date,
       };
 
       // =================================
       // EDIT SALE
       // =================================
-
       if (editId !== null) {
-        const response = await fetch(`${API_URL}/sales/${editId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(salePayload),
-        });
+        const response = await fetch(
+          `${API_URL}/sales/${editId}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(
+              salePayload
+            ),
+          }
+        );
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+        const result =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !result.success
+        ) {
           throw new Error(
-            errorData.message || "Sale update failed"
+            result.message ||
+              "Sale update failed"
           );
         }
 
-        alert("Sale updated successfully");
+        alert(
+          "Sale updated successfully"
+        );
       }
 
       // =================================
       // ADD SALE
       // =================================
-
       else {
-        const response = await fetch(`${API_URL}/sales`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(salePayload),
-        });
+        const response = await fetch(
+          `${API_URL}/sales`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(
+              salePayload
+            ),
+          }
+        );
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
+        const result =
+          await response.json();
 
+        if (
+          !response.ok ||
+          !result.success
+        ) {
           throw new Error(
-            errorData.message || "Sale save failed"
+            result.message ||
+              "Sale save failed"
           );
         }
 
-        alert("Sale saved to MySQL successfully");
+        alert(
+          "Sale saved to MySQL successfully"
+        );
       }
 
-      // Database-la irundhu fresh data load pannum
       await loadSales();
 
       setForm({
@@ -256,7 +408,11 @@ function Sales({ sales, setSales }) {
       setEditId(null);
       setShowForm(false);
     } catch (error) {
-      console.error("Save sale error:", error);
+      console.error(
+        "Save sale error:",
+        error
+      );
+
       alert(error.message);
     } finally {
       setLoading(false);
@@ -266,11 +422,11 @@ function Sales({ sales, setSales }) {
   // =====================================
   // SOFT DELETE SALE
   // =====================================
-
   const handleDelete = async (id) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this sale?"
-    );
+    const confirmDelete =
+      window.confirm(
+        "Are you sure you want to delete this sale?"
+      );
 
     if (!confirmDelete) {
       return;
@@ -279,23 +435,48 @@ function Sales({ sales, setSales }) {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_URL}/sales/${id}`, {
-        method: "DELETE",
-      });
+      const token = getToken();
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-
+      if (!token) {
         throw new Error(
-          errorData.message || "Sale delete failed"
+          "Authentication required"
         );
       }
 
-      alert("Sale deleted successfully");
+      const response = await fetch(
+        `${API_URL}/sales/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result.message ||
+            "Sale delete failed"
+        );
+      }
+
+      alert(
+        "Sale deleted successfully"
+      );
 
       await loadSales();
     } catch (error) {
-      console.error("Delete sale error:", error);
+      console.error(
+        "Delete sale error:",
+        error
+      );
+
       alert(error.message);
     } finally {
       setLoading(false);
@@ -305,11 +486,11 @@ function Sales({ sales, setSales }) {
   // =====================================
   // RESET
   // =====================================
-
   const handleReset = async () => {
-    const confirmReset = window.confirm(
-      "Are you sure you want to reset all sales data?"
-    );
+    const confirmReset =
+      window.confirm(
+        "Are you sure you want to reset all sales data?"
+      );
 
     if (!confirmReset) {
       return;
@@ -321,46 +502,48 @@ function Sales({ sales, setSales }) {
   // =====================================
   // TOTAL SALES
   // =====================================
-
   const totalSales = sales.reduce(
     (total, sale) =>
       total +
-      Number(sale.quantity) * Number(sale.rate),
+      Number(sale.quantity || 0) *
+        Number(sale.rate || 0),
     0
   );
 
   // =====================================
   // TOTAL QUANTITY
   // =====================================
-
-  const totalQuantity = sales.reduce(
-    (total, sale) =>
-      total + Number(sale.quantity),
-    0
-  );
+  const totalQuantity =
+    sales.reduce(
+      (total, sale) =>
+        total +
+        Number(sale.quantity || 0),
+      0
+    );
 
   // =====================================
   // PENDING AMOUNT
   // =====================================
-
-  const pendingAmount = sales.reduce(
-    (total, sale) =>
-      !sale.paid
-        ? total +
-          Number(sale.quantity) *
-            Number(sale.rate)
-        : total,
-    0
-  );
+  const pendingAmount =
+    sales.reduce(
+      (total, sale) =>
+        !sale.paid
+          ? total +
+            Number(sale.quantity || 0) *
+              Number(sale.rate || 0)
+          : total,
+      0
+    );
 
   return (
     <div className="page">
       {/* HEADER */}
-
       <div className="page-header">
         <div>
           <h1>Sales Management</h1>
-          <p>Manage your coconut sales</p>
+          <p>
+            Manage your coconut sales
+          </p>
         </div>
 
         <div className="page-actions">
@@ -385,7 +568,6 @@ function Sales({ sales, setSales }) {
       </div>
 
       {/* SUMMARY */}
-
       <div className="stock-summary">
         <div className="summary-card">
           <span>Total Sales</span>
@@ -419,7 +601,6 @@ function Sales({ sales, setSales }) {
       </div>
 
       {/* FORM */}
-
       {showForm && (
         <div className="form-card">
           <h2>
@@ -431,9 +612,10 @@ function Sales({ sales, setSales }) {
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               {/* CUSTOMER */}
-
               <div className="form-group">
-                <label>Customer Name</label>
+                <label>
+                  Customer Name
+                </label>
 
                 <input
                   type="text"
@@ -445,7 +627,6 @@ function Sales({ sales, setSales }) {
               </div>
 
               {/* DATE */}
-
               <div className="form-group">
                 <label>Date</label>
 
@@ -458,7 +639,6 @@ function Sales({ sales, setSales }) {
               </div>
 
               {/* QUANTITY */}
-
               <div className="form-group">
                 <label>Quantity</label>
 
@@ -473,9 +653,10 @@ function Sales({ sales, setSales }) {
               </div>
 
               {/* RATE */}
-
               <div className="form-group">
-                <label>Selling Rate</label>
+                <label>
+                  Selling Rate
+                </label>
 
                 <input
                   type="number"
@@ -488,23 +669,28 @@ function Sales({ sales, setSales }) {
               </div>
 
               {/* PAYMENT */}
-
               <div className="form-group">
-                <label>Payment Status</label>
+                <label>
+                  Payment Status
+                </label>
 
                 <select
                   name="paid"
                   value={form.paid}
                   onChange={handleChange}
                 >
-                  <option value="Paid">Paid</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Paid">
+                    Paid
+                  </option>
+
+                  <option value="Pending">
+                    Pending
+                  </option>
                 </select>
               </div>
             </div>
 
             {/* BUTTONS */}
-
             <div className="form-buttons">
               <button
                 type="button"
@@ -534,11 +720,12 @@ function Sales({ sales, setSales }) {
       )}
 
       {/* SALES HISTORY */}
-
       <div className="stock-table-card">
         <div className="table-title">
           <h2>Sales History</h2>
-          <p>All coconut sales records</p>
+          <p>
+            All coconut sales records
+          </p>
         </div>
 
         {sales.length === 0 ? (
@@ -547,7 +734,9 @@ function Sales({ sales, setSales }) {
 
             <h3>No Sales Available</h3>
 
-            <p>Add a sale to see it here.</p>
+            <p>
+              Add a sale to see it here.
+            </p>
           </div>
         ) : (
           <div className="table-container">
@@ -567,34 +756,43 @@ function Sales({ sales, setSales }) {
               <tbody>
                 {sales.map((sale) => {
                   const total =
-                    Number(sale.quantity) *
-                    Number(sale.rate);
+                    Number(
+                      sale.quantity || 0
+                    ) *
+                    Number(
+                      sale.rate || 0
+                    );
 
                   return (
-                    <tr key={sale.id}>
+                    <tr
+                      key={sale.id}
+                    >
                       <td>
                         <strong>
                           {sale.customer}
                         </strong>
                       </td>
 
-                      <td>{sale.date}</td>
+                      <td>
+                        {sale.date}
+                      </td>
 
                       <td>
                         {Number(
-                          sale.quantity
+                          sale.quantity || 0
                         ).toLocaleString()}
                       </td>
 
                       <td>
                         ₹
                         {Number(
-                          sale.rate
+                          sale.rate || 0
                         ).toLocaleString()}
                       </td>
 
                       <td>
-                        ₹{total.toLocaleString()}
+                        ₹
+                        {total.toLocaleString()}
                       </td>
 
                       <td>
@@ -616,21 +814,29 @@ function Sales({ sales, setSales }) {
                           <button
                             className="edit-btn"
                             onClick={() =>
-                              handleEdit(sale)
+                              handleEdit(
+                                sale
+                              )
                             }
                             title="Edit"
                           >
-                            <Pencil size={16} />
+                            <Pencil
+                              size={16}
+                            />
                           </button>
 
                           <button
                             className="delete-btn"
                             onClick={() =>
-                              handleDelete(sale.id)
+                              handleDelete(
+                                sale.id
+                              )
                             }
                             title="Delete"
                           >
-                            <Trash2 size={16} />
+                            <Trash2
+                              size={16}
+                            />
                           </button>
                         </div>
                       </td>
