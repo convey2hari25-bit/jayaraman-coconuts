@@ -1,22 +1,72 @@
 const express = require("express");
-const router = express.Router();
+const jwt = require("jsonwebtoken");
 
+const router = express.Router();
 const db = require("../db");
 
 // ===============================
-// GET ALL CUSTOMERS
+// AUTHENTICATION
 // ===============================
-router.get("/", async (req, res) => {
+function authenticateUser(req, res, next) {
   try {
-    const [customers] = await db.query(
-      "SELECT * FROM customers WHERE deleted = 0 ORDER BY id DESC"
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
     );
 
-    res.json(customers);
+    req.user = decoded;
+
+    next();
   } catch (error) {
-    console.error("Error fetching customers:", error);
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token",
+    });
+  }
+}
+
+// ===============================
+// GET ALL CUSTOMERS
+// Only logged-in user's customers
+// ===============================
+router.get("/", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const [customers] = await db.query(
+      `
+      SELECT *
+      FROM customers
+      WHERE user_id = ?
+        AND deleted = 0
+      ORDER BY id DESC
+      `,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      data: customers,
+    });
+  } catch (error) {
+    console.error(
+      "Error fetching customers:",
+      error.message
+    );
 
     res.status(500).json({
+      success: false,
       message: "Failed to fetch customers",
       error: error.message,
     });
@@ -25,166 +75,282 @@ router.get("/", async (req, res) => {
 
 // ===============================
 // GET CUSTOMER BY ID
+// Only user's own customer
 // ===============================
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+router.get(
+  "/:id",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
 
-    const [customers] = await db.query(
-      "SELECT * FROM customers WHERE id = ? AND deleted = 0",
-      [id]
-    );
+      const [customers] = await db.query(
+        `
+        SELECT *
+        FROM customers
+        WHERE id = ?
+          AND user_id = ?
+          AND deleted = 0
+        `,
+        [id, userId]
+      );
 
-    if (customers.length === 0) {
-      return res.status(404).json({
-        message: "Customer not found",
+      if (customers.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: customers[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error fetching customer:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to fetch customer",
+        error: error.message,
       });
     }
-
-    res.json(customers[0]);
-  } catch (error) {
-    console.error("Error fetching customer:", error);
-
-    res.status(500).json({
-      message: "Failed to fetch customer",
-      error: error.message,
-    });
   }
-});
+);
 
 // ===============================
 // ADD CUSTOMER
 // ===============================
-router.post("/", async (req, res) => {
-  try {
-    const { name, phone, address } = req.body;
+router.post(
+  "/",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
 
-    if (!name || !phone) {
-      return res.status(400).json({
-        message: "Name and phone are required",
-      });
-    }
-
-    const [result] = await db.query(
-      "INSERT INTO customers (name, phone, address, deleted) VALUES (?, ?, ?, 0)",
-      [name, phone, address || ""]
-    );
-
-    res.status(201).json({
-      message: "Customer added successfully",
-      customer: {
-        id: result.insertId,
+      const {
         name,
         phone,
-        address: address || "",
-        deleted: 0,
-      },
-    });
-  } catch (error) {
-    console.error("Error adding customer:", error);
+        address,
+      } = req.body;
 
-    res.status(500).json({
-      message: "Failed to add customer",
-      error: error.message,
-    });
+      if (!name || !phone) {
+        return res.status(400).json({
+          success: false,
+          message: "Name and phone are required",
+        });
+      }
+
+      const [result] = await db.query(
+        `
+        INSERT INTO customers
+        (
+          user_id,
+          name,
+          phone,
+          address,
+          deleted
+        )
+        VALUES (?, ?, ?, ?, 0)
+        `,
+        [
+          userId,
+          name,
+          phone,
+          address || "",
+        ]
+      );
+
+      res.status(201).json({
+        success: true,
+        message: "Customer added successfully",
+        customer: {
+          id: result.insertId,
+          user_id: userId,
+          name,
+          phone,
+          address: address || "",
+          deleted: 0,
+        },
+      });
+    } catch (error) {
+      console.error(
+        "Error adding customer:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to add customer",
+        error: error.message,
+      });
+    }
   }
-});
+);
 
 // ===============================
 // UPDATE CUSTOMER
+// Only user's own customer
 // ===============================
-router.put("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, phone, address } = req.body;
+router.put(
+  "/:id",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
 
-    if (!name || !phone) {
-      return res.status(400).json({
-        message: "Name and phone are required",
+      const {
+        name,
+        phone,
+        address,
+      } = req.body;
+
+      if (!name || !phone) {
+        return res.status(400).json({
+          success: false,
+          message: "Name and phone are required",
+        });
+      }
+
+      const [result] = await db.query(
+        `
+        UPDATE customers
+        SET
+          name = ?,
+          phone = ?,
+          address = ?
+        WHERE id = ?
+          AND user_id = ?
+          AND deleted = 0
+        `,
+        [
+          name,
+          phone,
+          address || "",
+          id,
+          userId,
+        ]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Customer updated successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Error updating customer:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to update customer",
+        error: error.message,
       });
     }
-
-    const [result] = await db.query(
-      `UPDATE customers
-       SET name = ?, phone = ?, address = ?
-       WHERE id = ? AND deleted = 0`,
-      [name, phone, address || "", id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        message: "Customer not found",
-      });
-    }
-
-    res.json({
-      message: "Customer updated successfully",
-    });
-  } catch (error) {
-    console.error("Error updating customer:", error);
-
-    res.status(500).json({
-      message: "Failed to update customer",
-      error: error.message,
-    });
   }
-});
+);
 
 // ===============================
 // DELETE CUSTOMER
+// Only user's own customer
 // ===============================
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+router.delete(
+  "/:id",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { id } = req.params;
 
-    // Check customer exists
-    const [customers] = await db.query(
-      "SELECT id FROM customers WHERE id = ? AND deleted = 0",
-      [id]
-    );
+      // Check customer belongs to logged-in user
+      const [customers] = await db.query(
+        `
+        SELECT id
+        FROM customers
+        WHERE id = ?
+          AND user_id = ?
+          AND deleted = 0
+        `,
+        [id, userId]
+      );
 
-    if (customers.length === 0) {
-      return res.status(404).json({
-        message: "Customer not found",
+      if (customers.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      // Check ACTIVE sales for same user
+      const [sales] = await db.query(
+        `
+        SELECT id
+        FROM sales
+        WHERE customer_id = ?
+          AND user_id = ?
+          AND deleted = 0
+        LIMIT 1
+        `,
+        [id, userId]
+      );
+
+      if (sales.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Customer cannot be deleted because active sales history exists",
+        });
+      }
+
+      // Soft delete
+      const [result] = await db.query(
+        `
+        UPDATE customers
+        SET deleted = 1
+        WHERE id = ?
+          AND user_id = ?
+          AND deleted = 0
+        `,
+        [id, userId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Customer deleted successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Error deleting customer:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message: "Failed to delete customer",
+        error: error.message,
       });
     }
-
-    // Check for ACTIVE sales only
-    const [sales] = await db.query(
-      "SELECT id FROM sales WHERE customer_id = ? AND deleted = 0 LIMIT 1",
-      [id]
-    );
-
-    if (sales.length > 0) {
-      return res.status(400).json({
-        message:
-          "Customer cannot be deleted because active sales history exists",
-      });
-    }
-
-    // Soft delete customer
-    const [result] = await db.query(
-      "UPDATE customers SET deleted = 1 WHERE id = ?",
-      [id]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        message: "Customer not found",
-      });
-    }
-
-    res.json({
-      message: "Customer deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting customer:", error);
-
-    res.status(500).json({
-      message: "Failed to delete customer",
-      error: error.message,
-    });
   }
-});
+);
 
 module.exports = router;

@@ -1,15 +1,56 @@
 const express = require("express");
-const router = express.Router();
+const jwt = require("jsonwebtoken");
 
+const router = express.Router();
 const db = require("../db");
 
 // =====================================
-// GET ALL STOCKS
+// AUTHENTICATION
 // =====================================
-router.get("/", async (req, res) => {
+function authenticateUser(req, res, next) {
   try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
+
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token",
+    });
+  }
+}
+
+// =====================================
+// GET ALL ACTIVE STOCKS
+// =====================================
+router.get("/", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
     const [rows] = await db.query(
-      "SELECT * FROM stocks ORDER BY id DESC"
+      `
+      SELECT *
+      FROM stocks
+      WHERE user_id = ?
+        AND deleted = 0
+      ORDER BY id DESC
+      `,
+      [userId]
     );
 
     const formattedStocks = rows.map((stock) => ({
@@ -39,8 +80,10 @@ router.get("/", async (req, res) => {
 // =====================================
 // ADD STOCK
 // =====================================
-router.post("/", async (req, res) => {
+router.post("/", authenticateUser, async (req, res) => {
   try {
+    const userId = req.user.id;
+
     const {
       type,
       quantity,
@@ -64,10 +107,23 @@ router.post("/", async (req, res) => {
     const [result] = await db.query(
       `
       INSERT INTO stocks
-      (type, quantity, purchase_price, selling_price)
-      VALUES (?, ?, ?, ?)
+      (
+        user_id,
+        type,
+        quantity,
+        purchase_price,
+        selling_price,
+        deleted
+      )
+      VALUES (?, ?, ?, ?, ?, 0)
       `,
-      [type, quantity, purchasePrice, sellingPrice]
+      [
+        userId,
+        type,
+        quantity,
+        purchasePrice,
+        sellingPrice,
+      ]
     );
 
     res.status(201).json({
@@ -89,8 +145,9 @@ router.post("/", async (req, res) => {
 // =====================================
 // UPDATE STOCK
 // =====================================
-router.put("/:id", async (req, res) => {
+router.put("/:id", authenticateUser, async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
 
     const {
@@ -122,14 +179,24 @@ router.put("/:id", async (req, res) => {
         purchase_price = ?,
         selling_price = ?
       WHERE id = ?
+        AND user_id = ?
+        AND deleted = 0
       `,
-      [type, quantity, purchasePrice, sellingPrice, id]
+      [
+        type,
+        quantity,
+        purchasePrice,
+        sellingPrice,
+        id,
+        userId,
+      ]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Stock not found",
+        message:
+          "Stock not found or does not belong to this user",
       });
     }
 
@@ -149,21 +216,29 @@ router.put("/:id", async (req, res) => {
 });
 
 // =====================================
-// DELETE STOCK
+// SOFT DELETE STOCK
 // =====================================
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticateUser, async (req, res) => {
   try {
+    const userId = req.user.id;
     const { id } = req.params;
 
     const [result] = await db.query(
-      "DELETE FROM stocks WHERE id = ?",
-      [id]
+      `
+      UPDATE stocks
+      SET deleted = 1
+      WHERE id = ?
+        AND user_id = ?
+        AND deleted = 0
+      `,
+      [id, userId]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({
         success: false,
-        message: "Stock not found",
+        message:
+          "Stock not found or does not belong to this user",
       });
     }
 
