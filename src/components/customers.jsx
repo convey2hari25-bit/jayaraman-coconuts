@@ -15,6 +15,21 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   "https://jayaraman-coconuts-8rvj.onrender.com/api/customers";
 
+// ==========================================
+// GET AUTH TOKEN
+// ==========================================
+const getToken = () => {
+  try {
+    return (
+      window.localStorage.getItem("authToken") ||
+      window.localStorage.getItem("token")
+    );
+  } catch (error) {
+    console.error("Token read error:", error);
+    return null;
+  }
+};
+
 function Customers({ customers = [], setCustomers }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -27,16 +42,6 @@ function Customers({ customers = [], setCustomers }) {
   });
 
   // ==========================================
-  // GET AUTH TOKEN
-  // ==========================================
-  const getToken = () => {
-    return (
-      localStorage.getItem("authToken") ||
-      localStorage.getItem("token")
-    );
-  };
-
-  // ==========================================
   // LOAD CUSTOMERS FROM MYSQL
   // ==========================================
   const loadCustomers = async () => {
@@ -45,38 +50,41 @@ function Customers({ customers = [], setCustomers }) {
 
       const token = getToken();
 
+      console.log(
+        "Customer API token:",
+        token ? "TOKEN FOUND" : "NO TOKEN"
+      );
+
       if (!token) {
         throw new Error("Authentication required");
       }
 
       const response = await fetch(API_URL, {
+        method: "GET",
         cache: "no-store",
         headers: {
+          Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
 
       const result = await response.json();
 
+      console.log("Customer API response:", result);
+
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message ||
-            "Failed to fetch customers"
+          result.message || "Failed to fetch customers"
         );
       }
 
-      const customerData = Array.isArray(
-        result.data
-      )
+      const customerData = Array.isArray(result.data)
         ? result.data
         : [];
 
       setCustomers(customerData);
     } catch (error) {
-      console.error(
-        "Load customers error:",
-        error
-      );
+      console.error("Load customers error:", error);
 
       alert(
         error.message ||
@@ -164,9 +172,7 @@ function Customers({ customers = [], setCustomers }) {
       const token = getToken();
 
       if (!token) {
-        throw new Error(
-          "Authentication required"
-        );
+        throw new Error("Authentication required");
       }
 
       // ======================================
@@ -178,32 +184,24 @@ function Customers({ customers = [], setCustomers }) {
           {
             method: "PUT",
             headers: {
-              "Content-Type":
-                "application/json",
+              Accept: "application/json",
+              "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-            body: JSON.stringify(
-              customerData
-            ),
+            body: JSON.stringify(customerData),
           }
         );
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
-        if (
-          !response.ok ||
-          !data.success
-        ) {
+        if (!response.ok || !data.success) {
           throw new Error(
             data.message ||
               "Failed to update customer"
           );
         }
 
-        alert(
-          "Customer updated successfully"
-        );
+        alert("Customer updated successfully");
 
         await loadCustomers();
       }
@@ -212,37 +210,26 @@ function Customers({ customers = [], setCustomers }) {
       // ADD CUSTOMER
       // ======================================
       else {
-        const response = await fetch(
-          API_URL,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(
-              customerData
-            ),
-          }
-        );
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(customerData),
+        });
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
-        if (
-          !response.ok ||
-          !data.success
-        ) {
+        if (!response.ok || !data.success) {
           throw new Error(
             data.message ||
               "Failed to add customer"
           );
         }
 
-        alert(
-          "Customer added successfully"
-        );
+        alert("Customer added successfully");
 
         await loadCustomers();
       }
@@ -257,10 +244,7 @@ function Customers({ customers = [], setCustomers }) {
       setEditId(null);
       setShowForm(false);
     } catch (error) {
-      console.error(
-        "Save customer error:",
-        error
-      );
+      console.error("Save customer error:", error);
 
       alert(
         error.message ||
@@ -275,10 +259,9 @@ function Customers({ customers = [], setCustomers }) {
   // DELETE CUSTOMER
   // ==========================================
   const handleDelete = async (id) => {
-    const confirmDelete =
-      window.confirm(
-        "Are you sure you want to delete this customer?"
-      );
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this customer?"
+    );
 
     if (!confirmDelete) {
       return;
@@ -290,9 +273,7 @@ function Customers({ customers = [], setCustomers }) {
       const token = getToken();
 
       if (!token) {
-        throw new Error(
-          "Authentication required"
-        );
+        throw new Error("Authentication required");
       }
 
       const response = await fetch(
@@ -300,27 +281,22 @@ function Customers({ customers = [], setCustomers }) {
         {
           method: "DELETE",
           headers: {
+            Accept: "application/json",
             Authorization: `Bearer ${token}`,
           },
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
-      if (
-        !response.ok ||
-        !data.success
-      ) {
+      if (!response.ok || !data.success) {
         throw new Error(
           data.message ||
             "Failed to delete customer"
         );
       }
 
-      alert(
-        "Customer deleted successfully"
-      );
+      alert("Customer deleted successfully");
 
       await loadCustomers();
     } catch (error) {
@@ -359,9 +335,7 @@ function Customers({ customers = [], setCustomers }) {
       <div className="page-header">
         <div>
           <h1>Customers</h1>
-          <p>
-            Manage your coconut customers
-          </p>
+          <p>Manage your coconut customers</p>
         </div>
 
         <div className="page-actions">
@@ -627,10 +601,8 @@ function Customers({ customers = [], setCustomers }) {
 
                         <span
                           style={{
-                            display:
-                              "flex",
-                            alignItems:
-                              "center",
+                            display: "flex",
+                            alignItems: "center",
                             gap: "7px",
                           }}
                         >
@@ -650,10 +622,8 @@ function Customers({ customers = [], setCustomers }) {
 
                         <span
                           style={{
-                            display:
-                              "flex",
-                            alignItems:
-                              "center",
+                            display: "flex",
+                            alignItems: "center",
                             gap: "7px",
                           }}
                         >
@@ -682,6 +652,7 @@ function Customers({ customers = [], setCustomers }) {
                               )
                             }
                             title="Edit"
+                            disabled={loading}
                           >
                             <Pencil
                               size={16}
@@ -696,6 +667,7 @@ function Customers({ customers = [], setCustomers }) {
                               )
                             }
                             title="Delete"
+                            disabled={loading}
                           >
                             <Trash2
                               size={16}
